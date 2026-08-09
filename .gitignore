@@ -8,3 +8,4 @@ scratch/**
 !scratch/README.md
 **/explorations/**
 **/!explorations/README.md
+kaggle_data

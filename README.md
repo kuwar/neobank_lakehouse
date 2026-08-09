@@ -1,223 +1,372 @@
-# <project-name>
+# 🏦 Neobank Lakehouse
 
-<One-line description of what this bundle deploys — e.g. "Daily sales ingestion and
-transformation jobs, deployed as a Databricks Asset Bundle.">
+> An end-to-end, production-shaped analytics platform for a digital-only bank —
+> built entirely as code with **Databricks Asset Bundles**, **Lakeflow Declarative
+> Pipelines**, and the **Unity Catalog** governed semantic layer.
 
-This repository is a **Databricks Asset Bundle** (DAB). All jobs, pipelines, and their
-source code are defined as code in `databricks.yml` and deployed with the Databricks CLI.
-The repository is the single source of truth — do not edit deployed files directly in the
-workspace.
+This project takes raw neobank data — customers, cards, transactions, device
+activity, and notifications — and turns it into a governed, query-able star schema
+with consistent business KPIs that any tool (SQL, dashboards, AI/BI Genie) can
+consume. It's designed as a learning capstone: every layer maps to a real
+capability a data team ships in practice, and the whole thing deploys with one
+command.
 
-> **New to this project?** Jump to [Quick start](#quick-start). New to bundles? See the
-> [workflow](#development-workflow) and [how files are deployed](#where-files-are-deployed).
+---
+
+## Table of contents
+
+1. [What this project demonstrates](#what-this-project-demonstrates)
+2. [Architecture](#architecture)
+3. [Core concepts: jobs, tasks, pipelines & triggers](#core-concepts-jobs-tasks-pipelines--triggers)
+4. [Data model](#data-model)
+5. [The dataset](#the-dataset)
+6. [Repository structure](#repository-structure)
+7. [Prerequisites](#prerequisites)
+8. [Getting started](#getting-started)
+9. [How a run flows end to end](#how-a-run-flows-end-to-end)
+10. [The semantic layer (business metrics)](#the-semantic-layer-business-metrics)
+11. [Configuration](#configuration)
+12. [Free Edition notes](#free-edition--serverless-notes)
+13. [Troubleshooting](#troubleshooting)
+14. [Extending the project](#extending-the-project)
+15. [References](#references)
+
+---
+
+## What this project demonstrates
+
+| Capability | Implemented in |
+|---|---|
+| **Asset Bundles** — infrastructure as code, dev/prod environments | `databricks.yml`, `resources/` |
+| **Scalable incremental ingestion** — Auto Loader (`cloudFiles`) | `src/pipeline/bronze.py` |
+| **Medallion architecture** — bronze → silver → gold | `src/pipeline/` |
+| **Data-quality enforcement** — expectations that drop & count bad rows | `src/pipeline/silver.py` |
+| **Dimensional modeling** — conformed dimensions + fact tables | `src/pipeline/gold.py` |
+| **Governed semantic layer** — Unity Catalog metric views, `MEASURE()` | `src/metrics/create_metric_views.py` |
+| **Orchestration** — a job chaining ingest → pipeline → metrics | `resources/jobs.yml` |
+| **Governance & lineage** — automatic via Unity Catalog | (platform) |
+| **Natural-language analytics** — Genie grounded on the metric views | (see semantic layer) |
+
+The point isn't just to move data — it's to move it in a way that stays
+**consistent, governed, and query-able** as it scales.
+
+---
+
+## Architecture
+
+Raw files land in a Unity Catalog volume, flow through three refinement layers,
+and surface as governed metrics:
+
+```
+   Kaggle dataset                        Synthetic events
+   users · cards · transactions          devices · notifications
+              \                              /
+               ▼                            ▼
+          ┌──────────────────────────────────────┐
+          │   Unity Catalog volume (raw files)    │
+          └──────────────────────────────────────┘
+                          │  Auto Loader — incremental, scales to millions of files
+                          ▼
+   ┌───────────────────────────────────────────────────────────────┐
+   │  BRONZE   raw · append-only · schema-tracked                   │
+   │     ▼                                                          │
+   │  SILVER   typed · deduplicated · conformed · quality-checked   │
+   │     ▼                                                          │
+   │  GOLD     star schema — fact tables + conformed dimensions     │
+   └───────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+          ┌──────────────────────────────────────┐
+          │  Metric views (business semantics)    │
+          │  define each KPI once → MEASURE()     │
+          └──────────────────────────────────────┘
+                 │            │            │
+                 ▼            ▼            ▼
+            AI/BI Genie   Dashboards   SQL / notebooks
+```
+
+**Why medallion?** Each layer has one job. Bronze preserves raw truth (so you can
+always reprocess). Silver makes data *correct* (types, dedup, quality). Gold makes
+it *fast to query* (star schema). Keeping these separate means a bug in
+transformation logic never corrupts your raw record, and analysts always query the
+clean, modeled layer — never the mess.
+
+---
+
+## Core concepts: jobs, tasks, pipelines & triggers
+
+Understanding how the pieces relate is the key to reading this project.
+
+### The hierarchy
+
+- **Job** — the orchestrator you schedule. It coordinates work but does none itself.
+  (Databricks now calls these *Lakeflow Jobs*; older docs say "Workflows.")
+- **Task** — one step inside a job. Every task has a **type** that decides what it
+  does: `notebook_task`, `python_wheel_task`, `sql_task`, `pipeline_task`,
+  `run_job_task`, plus control types like `condition_task` and `for_each_task`.
+- **Pipeline** — a *separate* object (a Lakeflow Declarative Pipeline). It holds its
+  own graph of tables/materialized views. A job reaches it through one task type:
+  `pipeline_task`.
+
+```
+  JOB  (schedule / manual / CLI / file-arrival trigger)
+   └── TASK land_data           (notebook_task)
+        └── depends_on ──► TASK build_medallion   (pipeline_task) ──┐
+                            └── depends_on ──► TASK build_metric_views (notebook_task)
+                                                                     │ triggers
+                                                                     ▼
+  PIPELINE neobank_medallion
+   └── bronze ──► silver ──► gold   (order auto-inferred from dlt.read() lineage)
+```
+
+### The one insight that clears up the confusion — two kinds of DAG
+
+There are two dependency graphs here, and they work in **opposite** ways:
+
+- **The job's task graph is orchestration (imperative).** *You* write the order with
+  `depends_on`. No `depends_on` → tasks run in parallel. You are in control.
+- **The pipeline's table graph is dataflow (declarative).** You do **not** write
+  `depends_on`. Because `silver_transactions` calls `dlt.read("bronze_transactions")`,
+  the pipeline *infers* that bronze runs first. You declare *what* the tables are;
+  the engine decides *when*.
+
+Orchestration on the outside, dataflow on the inside.
+
+### How each thing is triggered
+
+| Level | Started by |
+|---|---|
+| **Job** | Schedule (cron), manual run, CLI (`databricks bundle run <job>`), API, file-arrival or table-update trigger, continuous mode, or another job (`run_job_task`). |
+| **Task** | Its `depends_on` — runs when upstream tasks finish (subject to `run_if`). First task(s) start when the job starts. |
+| **Pipeline** | A job's `pipeline_task`, its own schedule, continuous mode, manual run, or CLI (`databricks bundle run <pipeline>`). |
+| **Table in a pipeline** | Never by hand — order comes from `dlt.read()` lineage. |
+
+### How the link is wired in the bundle
+
+Jobs and pipelines are both `resources:`, connected by a single substitution that
+injects the pipeline's ID into the job task at deploy time:
+
+```yaml
+tasks:
+  - task_key: build_medallion
+    pipeline_task:
+      pipeline_id: ${resources.pipelines.neobank_medallion.id}   # ← the wire
+    depends_on:
+      - task_key: land_data                                      # ← order you control
+```
+
+You never hardcode an ID — the reference resolves itself on every deploy.
+
+---
+
+## Data model
+
+### Sources
+
+- **Real (Kaggle):** `users_data.csv`, `cards_data.csv`, `transactions_data.csv`
+  (≈13M rows), `mcc_codes.json`.
+- **Synthetic (generated):** device/session events and notification deliveries,
+  keyed to the real `client_id`s so they join cleanly to actual customers.
+
+### Gold star schema
+
+```
+        dim_users ─────┐              ┌───── dim_merchant
+                       ├── fact_transactions ──┐
+        dim_cards ─────┘                       └── dim_date
+        dim_users ────────── fact_notifications
+        dim_users ────────── fact_device_activity
+```
+
+| Table | Grain (one row per…) | Key columns |
+|---|---|---|
+| `fact_transactions` | transaction | `amount_usd`, `is_declined`, `mcc`, `is_fraud` |
+| `fact_notifications` | notification sent | `channel`, `category`, `opened` |
+| `fact_device_activity` | device session/event | `os`, `event_type`, `event_ts` |
+| `dim_users` | customer | `income_band`, `credit_band` |
+| `dim_cards` | card | `card_brand`, `card_type`, `credit_limit` |
+| `dim_merchant` | merchant | `mcc_description`, `merchant_city` |
+| `dim_date` | calendar day | `year`, `month`, `is_weekend` |
+
+Facts hold the *numbers and foreign keys*; dimensions hold the *descriptive
+attributes you slice by*. This is exactly the shape metric views and BI tools
+expect — fast joins, unambiguous grain.
+
+---
+
+## The dataset
+
+Core data: **[`computingvictor/transactions-fraud-datasets`](https://www.kaggle.com/datasets/computingvictor/transactions-fraud-datasets)**
+on Kaggle. It's realistic and large (~13M transactions with users, cards, and MCC
+merchant codes), which makes it ideal for practicing scale.
+
+Because it has no device or notification streams, the ingestion step generates
+those synthetically — giving you all four requested domains (devices, users,
+transactions, notifications) with believable relationships.
+
+> **Volume control:** the `sample_rows` variable caps transactions (default
+> `500000`) so you don't exhaust Free Edition compute quota while learning. Set it
+> to `0` on a real workspace to process the full dataset.
+
+---
+
+## Repository structure
+
+```
+neobank-lakehouse/
+├── databricks.yml                     # Bundle: name, variables, dev/prod targets
+├── resources/
+│   ├── pipelines.yml                  # Lakeflow declarative pipeline (the medallion)
+│   └── jobs.yml                       # Daily orchestration job (ingest → pipeline → metrics)
+└── src/
+    ├── ingest/
+    │   └── land_and_generate.py       # Download Kaggle data + generate synthetic events
+    ├── pipeline/
+    │   ├── bronze.py                  # Auto Loader raw ingest (append-only)
+    │   ├── silver.py                  # Clean, type, dedup, quality expectations
+    │   └── gold.py                    # Star schema — facts + dimensions
+    └── metrics/
+        └── create_metric_views.py     # Unity Catalog metric views (semantic layer)
+```
 
 ---
 
 ## Prerequisites
 
-- **Databricks CLI** v0.218.0 or newer (v1.x recommended). Check with `databricks --version`.
-- Access to the target Databricks workspace(s).
-- Python 3.x (only if this bundle builds a wheel — see [Building the library](#building-the-library)).
-- A personal access token or OAuth login for authentication.
-
-Install the CLI:
-
-```bash
-# macOS / Linux
-brew install databricks
-# Windows
-winget install Databricks.DatabricksCLI
-# Universal script
-curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
-```
+- **Databricks CLI** v0.218.0 or newer — check with `databricks --version`.
+- A **Unity Catalog-enabled** workspace (Databricks Free Edition qualifies).
+- **Kaggle credentials** for the download step — set `KAGGLE_USERNAME` /
+  `KAGGLE_KEY`, or upload the CSVs to the volume manually (the ingest notebook
+  supports both paths).
 
 ---
 
-## Quick start
+## Getting started
+
+Follow this order every time. Only `run` consumes compute — everything else is free,
+so validate and plan as often as you like.
 
 ```bash
 # 1. Authenticate (once per machine)
-databricks configure           # host: https://<workspace>.cloud.databricks.com  + token
+databricks configure                 # host: https://<workspace>.cloud.databricks.com  + token
+databricks current-user me           # verify
 
-# 2. Verify auth
-databricks current-user me
+# 2. Point the bundle at your workspace
+#    Edit the two `host:` lines in databricks.yml
 
-# 3. Validate and preview before deploying (neither uses compute)
+# 3. Validate & preview — FREE, no compute
 databricks bundle validate -t dev
 databricks bundle plan -t dev
 
-# 4. Deploy to your dev environment
+# 4. Deploy to your dev sandbox — FREE
 databricks bundle deploy -t dev
 
-# 5. Run a resource (this is the only step that consumes compute)
-databricks bundle run <resource_key> -t dev
+# 5. Run the full workflow — THIS uses compute
+databricks bundle run neobank_daily -t dev
 
-# 6. Tear down when finished experimenting
+# 6. Inspect
+databricks bundle summary
+databricks bundle open neobank_medallion -t dev     # watch the pipeline DAG build
+
+# 7. Clean up when finished
 databricks bundle destroy -t dev
 ```
 
----
-
-## Authentication
-
-1. In the workspace UI: **Settings → Developer → Access tokens → Manage → Generate new token**.
-2. Run `databricks configure` and paste the workspace host (no trailing slash) and token.
-
-This writes a profile to `~/.databrickscfg`. To use a named profile, pass `-p <profile>` on any
-command. Prefer OAuth? Use `databricks auth login --host https://<workspace>.cloud.databricks.com`.
-
-> Deploy from your **local machine**, not from inside the workspace. See
-> [Free Edition notes](#free-edition--serverless-notes).
+In `dev` mode, every resource is prefixed `[dev <you>]` and schedules are paused, so
+you can iterate freely without touching anything shared.
 
 ---
 
-## Project structure
+## How a run flows end to end
 
+When you run `neobank_daily`, here's the sequence (and which concept each step
+illustrates):
+
+1. **`land_data`** (`notebook_task`) downloads the Kaggle files into the Unity
+   Catalog volume and generates synthetic device + notification events.
+2. **`build_medallion`** (`pipeline_task`) — because it `depends_on` `land_data`, it
+   waits for step 1, then *triggers the entire pipeline*. Inside the pipeline, bronze
+   → silver → gold order themselves from `dlt.read()` lineage (no `depends_on`).
+3. **`build_metric_views`** (`notebook_task`) — waits for the pipeline, then creates
+   the governed metric views on top of gold.
+
+To test just one part:
+
+```bash
+databricks bundle run neobank_medallion -t dev                     # pipeline only
+databricks bundle run --only build_medallion neobank_daily -t dev  # one task
 ```
-.
-├── databricks.yml          # Bundle definition: name, variables, targets, includes
-├── resources/              # Resource definitions, one file per job/pipeline
-│   ├── <job>.yml
-│   └── <pipeline>.yml
-├── src/                    # Source code — notebooks and .py files (synced, not built)
-│   ├── ingest.py
-│   └── transform.py
-├── <my_lib>/               # (optional) Python package built into a wheel
-│   ├── pyproject.toml
-│   └── src/<my_lib>/
-└── README.md
+
+---
+
+## The semantic layer (business metrics)
+
+Metric views define each KPI **once**, in YAML, governed in Unity Catalog. Every
+consumer queries the same definition with `MEASURE()` and can group by any
+dimension at runtime — so "total spend" means the same thing in every dashboard,
+notebook, and Genie answer.
+
+Two views are created:
+
+- **`mv_transactions`** — total spend, transaction count, active customers, average
+  transaction value, decline rate, fraud rate.
+- **`mv_engagement`** — notifications sent, open rate, reached customers.
+
+Query them like any table, but with `MEASURE()`:
+
+```sql
+-- Spend and active customers by merchant category
+SELECT `Merchant category`,
+       MEASURE(`Total spend`)      AS spend,
+       MEASURE(`Active customers`) AS customers
+FROM neobank_dev.gold.mv_transactions
+GROUP BY `Merchant category`
+ORDER BY spend DESC;
+
+-- Push vs email vs SMS open rate
+SELECT `Channel`, MEASURE(`Open rate`) AS open_rate
+FROM neobank_dev.gold.mv_engagement
+GROUP BY `Channel`;
 ```
 
-What each part is for:
-
-| Path / block | Purpose |
-|---|---|
-| `databricks.yml` → `bundle:` | The project's identity (its name). |
-| `databricks.yml` → `variables:` | Reusable values, overridable per target. |
-| `databricks.yml` → `targets:` | Deployment environments (`dev`, `prod`) and their overrides. |
-| `resources/*.yml` → `resources:` | The Databricks objects to create (jobs, pipelines, apps). |
-| `src/` | Notebooks and Python files. Referenced by resources; synced on deploy. |
-| `<my_lib>/` | Optional built library; declared under `artifacts:` and attached to a task. |
+Point an **AI/BI Genie** space at these two views and business users can ask
+questions in plain language — *"push open rate for high-income customers last
+month?"* — with answers grounded in the governed metrics, no SQL and no metric drift.
 
 ---
 
 ## Configuration
 
-Environments are defined under `targets:` in `databricks.yml`. This project uses:
+Defined in `databricks.yml`. Override per target, or ad hoc with `--var "name=value"`.
 
-| Target | Mode | Purpose |
+| Variable | Default (dev) | Purpose |
 |---|---|---|
-| `dev` | `development` | Personal sandbox. Resource names are prefixed `[dev <you>]`; schedules paused. |
-| `prod` | `production` | Shared production. Strict validation; no name prefixing. |
+| `catalog` | `neobank_dev` | Unity Catalog catalog for all objects |
+| `bronze_schema` / `silver_schema` / `gold_schema` | `bronze` / `silver` / `gold` | Schema per medallion layer |
+| `volume` | `raw` | Volume that holds landed raw files |
+| `sample_rows` | `500000` | Cap on transactions loaded (`0` = all ~13M) |
 
-Common variables (override per target or with `--var "name=value"`):
+**Targets:**
 
-| Variable | Default | Description |
-|---|---|---|
-| `catalog` | `<main>` | Unity Catalog catalog to write to. |
-| `<other>` | `<...>` | `<describe>` |
-
-Override examples:
-
-```bash
-databricks bundle deploy -t dev --var "catalog=sandbox"
-databricks bundle deploy -t prod
-```
-
----
-
-## Development workflow
-
-Always follow this order. Only `run` consumes compute; everything else is free to run as often
-as you like, so validate and plan before every deploy.
-
-```
-validate  →  plan  →  deploy -t dev  →  run  →  destroy
- (free)      (free)      (free)      (compute)   (free)
-```
-
-1. **Edit locally.** Change notebooks/`.py` in `src/` and resource YAML in `resources/`.
-2. **Validate.** `databricks bundle validate -t dev` — catches config errors for free.
-3. **Plan.** `databricks bundle plan -t dev` — preview create/update/delete actions.
-4. **Deploy.** `databricks bundle deploy -t dev` — syncs files and applies resources.
-5. **Run.** `databricks bundle run <key> -t dev` — executes; pass params with `--params k=v`.
-6. **Inspect.** `databricks bundle summary` for links, or `databricks bundle open <key>`.
-7. **Clean up.** `databricks bundle destroy -t dev` removes everything this bundle deployed.
-
-For a fast inner loop, run `databricks bundle sync --watch` in a separate terminal to push file
-edits continuously without a full deploy.
-
----
-
-## Where files are deployed
-
-On deploy, the CLI **incrementally** syncs your files into a per-target folder in the workspace:
-
-```
-/Workspace/Users/<you>/.bundle/<project-name>/<target>/
-├── files/       # your src/ tree, preserved exactly (e.g. files/src/ingest.py)
-├── artifacts/   # built wheels/JARs (under .internal/)
-└── state/       # deployment metadata — do not edit
-```
-
-`dev` and `prod` deploy to **separate folders**, so dev work never touches prod. A task written
-as `notebook_path: ./src/ingest.py` resolves to `.../<target>/files/src/ingest.py` after deploy.
-
-> **Source of truth is this repo.** Deploy only uploads files that changed *locally*. Editing a
-> notebook directly in the workspace will not be overwritten by the next deploy and causes drift —
-> always edit locally and redeploy. Override the base path with `workspace.root_path` if needed.
-
----
-
-## Building the library
-
-*(Delete this section if the bundle has no `artifacts:` block.)*
-
-Reusable Python code lives in `<my_lib>/` and is built into a wheel at deploy time:
-
-```yaml
-artifacts:
-  <my_lib>:
-    type: whl
-    build: python -m build --wheel
-    path: ./<my_lib>
-```
-
-Prerequisites: `pip install build wheel setuptools`. The wheel is built locally on `deploy`,
-uploaded to `artifacts/`, and attached to the task's `libraries`. On serverless compute, prefer
-`%pip install` or an `environments` spec if a classic library install fails.
-
----
-
-## Command reference
-
-| Command | What it does | Uses compute? |
-|---|---|---|
-| `databricks bundle validate -t <t>` | Check config syntax | No |
-| `databricks bundle plan -t <t>` | Preview changes | No |
-| `databricks bundle deploy -t <t>` | Sync files + apply resources | No |
-| `databricks bundle run <key> -t <t>` | Execute a job/pipeline | **Yes** |
-| `databricks bundle summary` | Show deployed identity + links | No |
-| `databricks bundle open <key>` | Open a resource in the browser | No |
-| `databricks bundle sync --watch` | Continuously sync file edits | No |
-| `databricks bundle generate job --existing-job-id <id> --bind` | Adopt a UI-built job | No |
-| `databricks bundle destroy -t <t>` | Delete deployed resources | No |
-
-Add `-h` to any command for its full flags.
+| Target | Mode | Catalog | Data volume |
+|---|---|---|---|
+| `dev` | `development` | `neobank_dev` | Sampled (500k) |
+| `prod` | `production` | `neobank` | Full dataset |
 
 ---
 
 ## Free Edition / serverless notes
 
-*(Remove this section if the target workspaces are paid tiers.)*
-
-- **Serverless only** — no classic clusters. Do not add `new_cluster`/`job_clusters` blocks; set
-  `serverless: true` on pipelines.
-- **Deploy from your local machine** — deploying inside the serverless workspace can fail on a
-  blocked Terraform download. If it does, run `databricks bundle deployment migrate` to switch to
-  the Terraform-free engine.
-- **Fair-usage quota** — Free Edition is free with no bill, but exceeding the daily compute quota
-  pauses compute until reset. Data and settings are never deleted. Test with small runs first.
+- The pipeline is `serverless: true` — do **not** add classic clusters.
+- **Deploy from your local machine**, not from inside the workspace (a serverless
+  deploy can fail on a blocked Terraform download; if it does, run
+  `databricks bundle deployment migrate`).
+- Keep `sample_rows` modest while learning. The pipeline is incremental, so re-runs
+  only process new data.
+- If the Kaggle download can't reach the internet from serverless, upload the CSVs
+  to the volume via the UI once, then re-run.
+- Free Edition is free forever; the only limit is a daily compute quota that pauses
+  compute (never deletes data) if exceeded.
 
 ---
 
@@ -226,25 +375,40 @@ Add `-h` to any command for its full flags.
 | Symptom | Fix |
 |---|---|
 | `error downloading Terraform … hashicorp.com` | Deploy locally, or run `databricks bundle deployment migrate`. |
-| Auth failures | Regenerate the token, re-run `databricks configure`, confirm host has no trailing slash. |
-| `Cluster not found` / node type errors | Remove classic cluster config; use serverless. |
-| Deploy created a duplicate instead of updating | Bind it: `databricks bundle deployment bind <key> <id> -t <t>`. |
-| Files not appearing in the workspace | Confirm they're under the bundle root or a `sync.paths` entry; check `.gitignore`. |
-| Workspace edits keep reappearing after deploy | Expected — edit locally, not in the workspace. |
+| Auth failures | Regenerate token, re-run `databricks configure`, ensure host has no trailing slash. |
+| `Cluster not found` / node type errors | Remove classic cluster config; the pipeline must be serverless. |
+| Kaggle download fails | Set `KAGGLE_USERNAME`/`KAGGLE_KEY`, or upload CSVs to the volume manually and re-run. |
+| Metric-view DDL rejected | `WITH METRICS LANGUAGE YAML` is a newer feature; verify syntax against the current business-semantics docs. |
+| Pipeline task creates a duplicate | Ensure the job references `${resources.pipelines.neobank_medallion.id}`, not a hardcoded ID. |
+| Compute suddenly unavailable | Free Edition daily quota reached — wait for reset; data is safe. |
 
 ---
 
-## Conventions
+## Extending the project
 
-- One resource per file under `resources/`, named after the resource key.
-- Keep `src/` free of environment-specific values — use `variables:` and target overrides instead.
-- Never commit tokens or secrets. Use Databricks secrets or environment variables.
-- Run `validate` and `plan` before opening a pull request.
+Great next exercises, roughly in order of impact:
+
+- **Real fraud KPI** — join `train_fraud_labels.json` into `fact_transactions` so
+  `Fraud rate` reflects true labels, then build a fraud dashboard.
+- **SCD Type 2 history** on `dim_users` using `dlt.apply_changes` (AUTO CDC) to track
+  how customer attributes change over time.
+- **Engagement stickiness** — add a DAU/MAU window measure to `mv_engagement`.
+- **Materialized metric views** for faster dashboards.
+- **Agent metadata** (synonyms, display formats) so Genie speaks your business terms.
+- **Alerting** — a Databricks Alert when `Decline rate` crosses a threshold.
+- **File-arrival trigger** on the job so it runs when new data lands, not on a clock.
 
 ---
 
 ## References
 
-- Declarative Automation Bundles (formerly Asset Bundles): https://docs.databricks.com/aws/en/dev-tools/bundles/
-- CLI `bundle` commands: https://docs.databricks.com/aws/en/dev-tools/cli/bundle-commands
-- Configuration reference: https://docs.databricks.com/aws/en/dev-tools/bundles/reference
+- Databricks Asset Bundles: https://docs.databricks.com/aws/en/dev-tools/bundles/
+- Bundle CLI commands: https://docs.databricks.com/aws/en/dev-tools/cli/bundle-commands
+- Lakeflow Declarative Pipelines: https://docs.databricks.com/aws/en/dlt/
+- Unity Catalog business semantics / metric views: https://docs.databricks.com/aws/en/business-semantics/
+- Dataset: https://www.kaggle.com/datasets/computingvictor/transactions-fraud-datasets
+
+---
+
+*Built as a learning project to showcase the Databricks Lakehouse and Asset Bundles.
+Not affiliated with any real financial institution; all data is public or synthetic.*

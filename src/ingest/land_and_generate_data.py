@@ -5,6 +5,10 @@
 #   2. Generate synthetic device + notification events keyed to real users.
 # The medallion pipeline then reads these files with Auto Loader.
 # ─────────────────────────────────────────────────────────────────────────────
+from databricks.sdk.runtime import spark
+
+
+
 dbutils.widgets.text("catalog", "neobank_dev")
 dbutils.widgets.text("volume", "raw")
 dbutils.widgets.text("sample_rows", "500000")

@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Neobank Lakehouse — Databricks Asset Bundle
+# A scalable medallion pipeline (bronze → silver → gold) over neobank data,
+# topped with a Unity Catalog metric-view semantic layer.
+# ─────────────────────────────────────────────────────────────────────────────
+bundle:
+  name: neobank_lakehouse
+
+include:
+  - resources/*.yaml
+
+# Reusable values. Override per target below or with --var "name=value".
+variables:
+  catalog:
+    description: Unity Catalog catalog for all objects
+    default: neobank
+  bronze_schema:
+    default: bronze
+  silver_schema:
+    default: silver
+  gold_schema:
+    default: gold
+  volume:
+    description: Volume that holds landed raw files
+    default: raw
+  # Keep this small while learning on Free Edition; raise for a real run.
+  sample_rows:
+    description: Max transactions to load (0 = all ~13M)
+    default: "500000"
+
+targets:
+  # Personal sandbox — names prefixed [dev you], schedules paused. Safe + cheap.
+  dev:
+    mode: development
+    default: true
+    variables:
+      catalog: neobank_dev
+    workspace:
+      host: https://dbc-31fcc0ce-44e6.cloud.databricks.com
+
+  prod:
+    mode: production
+    workspace:
+      host: https://dbc-31fcc0ce-44e6.cloud.databricks.com
+      # We explicitly deploy to /Workspace/Users/kuwarsaurav21@gmail.com to make sure we only have a single copy.
+      root_path: /Workspace/Users/kuwarsaurav21@gmail.com/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: neobank_prod
+    permissions:
+      - user_name: kuwarsaurav21@gmail.com
+        level: CAN_MANAGE
