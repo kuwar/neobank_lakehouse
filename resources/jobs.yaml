@@ -1,0 +1,45 @@
+# Orchestration job: land data -> run the medallion pipeline -> (re)build metric views.
+# Scheduled daily; in dev mode the schedule is auto-paused so it never fires by surprise.
+resources:
+  jobs:
+    neobank_daily:
+      name: neobank_daily
+      tags:
+        project: neobank
+        layer: orchestration
+      schedule:
+        quartz_cron_expression: "0 0 5 * * ?"   # 05:00 daily (paused in dev)
+        timezone_id: UTC
+        pause_status: UNPAUSED
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: sample_rows
+          default: ${var.sample_rows}
+
+      tasks:
+        # 1) Download Kaggle data into the volume + generate synthetic events.
+        - task_key: land_data
+          notebook_task:
+            notebook_path: ../src/ingest/land_and_generate_data.py
+            base_parameters:
+              catalog: ${var.catalog}
+              volume: ${var.volume}
+              sample_rows: ${var.sample_rows}
+
+        # 2) Run the medallion pipeline (bronze -> silver -> gold).
+        - task_key: build_medallion
+          depends_on:
+            - task_key: land_data
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.neobank_medallion.id}
+
+        # 3) Create/refresh the Unity Catalog metric views (semantic layer).
+        - task_key: build_metric_views
+          depends_on:
+            - task_key: build_medallion
+          notebook_task:
+            notebook_path: ../src/metrics/create_metric_views.py
+            base_parameters:
+              catalog: ${var.catalog}
+              gold_schema: ${var.gold_schema}

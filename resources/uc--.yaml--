@@ -1,0 +1,30 @@
+resources:
+  catalogs:
+    neobank:
+      name: ${var.catalog}
+      comment: "Neobank lakehouse catalog — managed by the bundle"
+      lifecycle:
+        prevent_destroy: true
+
+  schemas:
+    bronze:
+      catalog_name: ${resources.catalogs.neobank.name}   # reference = ordering edge
+      name: ${var.bronze_schema}
+      lifecycle:
+        prevent_destroy: true
+    silver:
+      catalog_name: ${resources.catalogs.neobank.name}
+      name: ${var.silver_schema}
+      lifecycle:
+        prevent_destroy: true
+    gold:
+      catalog_name: ${resources.catalogs.neobank.name}
+      name: ${var.gold_schema}
+      lifecycle:
+        prevent_destroy: true
+
+  volumes:
+    raw:
+      catalog_name: ${resources.catalogs.neobank.name}
+      schema_name: ${resources.schemas.bronze.name}
+      name: ${var.volume}
