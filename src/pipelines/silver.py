@@ -5,7 +5,16 @@
 # bad rows are dropped (and counted) instead of silently poisoning analytics.
 # ─────────────────────────────────────────────────────────────────────────────
 import dlt
+from databricks.sdk.runtime import spark
 from pyspark.sql import functions as F
+
+
+catalog = spark.conf.get("neobank.catalog")
+bronze  = spark.conf.get("neobank.bronze_schema")
+silver  = spark.conf.get("neobank.silver_schema")
+spark.sql(f"USE CATALOG {catalog}")
+spark.sql(f"USE SCHEMA {silver}") 
+
 
 # ── Users ────────────────────────────────────────────────────────────────────
 @dlt.table(comment="Cleaned customers, one row per client.")
@@ -13,7 +22,7 @@ from pyspark.sql import functions as F
 @dlt.expect("plausible_age", "current_age BETWEEN 16 AND 110")
 def silver_users():
     return (
-        dlt.read("bronze_users")
+        dlt.read(f"{catalog}.{bronze}.bronze_users")
         .select(
             F.col("id").cast("int").alias("client_id"),
             F.col("current_age").cast("int").alias("current_age"),
@@ -31,7 +40,7 @@ def silver_users():
 @dlt.expect_or_drop("valid_card", "card_id IS NOT NULL AND client_id IS NOT NULL")
 def silver_cards():
     return (
-        dlt.read("bronze_cards")
+        dlt.read(f"{catalog}.{bronze}.bronze_cards")
         .select(
             F.col("id").cast("int").alias("card_id"),
             F.col("client_id").cast("int").alias("client_id"),
@@ -49,7 +58,7 @@ def silver_cards():
 @dlt.expect("nonzero_amount", "amount_usd <> 0")
 def silver_transactions():
     tx = (
-        dlt.read("bronze_transactions")
+        dlt.read(f"{catalog}.{bronze}.bronze_transactions")
         .select(
             F.col("id").cast("long").alias("transaction_id"),
             F.to_timestamp("date").alias("transaction_ts"),
@@ -74,7 +83,7 @@ def silver_transactions():
 @dlt.expect_or_drop("valid_event", "client_id IS NOT NULL AND event_ts IS NOT NULL")
 def silver_device_events():
     return (
-        dlt.read("bronze_device_events")
+        dlt.read(f"{catalog}.{bronze}.bronze_device_events")
         .select(
             "client_id", "device_id", "os", "event_type", "ip",
             F.col("event_ts").cast("timestamp").alias("event_ts"),
@@ -88,7 +97,7 @@ def silver_device_events():
 @dlt.expect_or_drop("valid_notif", "notification_id IS NOT NULL AND client_id IS NOT NULL")
 def silver_notifications():
     return (
-        dlt.read("bronze_notifications")
+        dlt.read(f"{catalog}.{bronze}.bronze_notifications")
         .select(
             "notification_id",
             F.col("client_id").cast("int").alias("client_id"),

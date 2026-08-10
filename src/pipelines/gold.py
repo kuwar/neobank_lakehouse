@@ -10,13 +10,22 @@
 #   dim_users ─── fact_device_activity
 # ─────────────────────────────────────────────────────────────────────────────
 import dlt
+from databricks.sdk.runtime import spark
 from pyspark.sql import functions as F
+
+
+catalog = spark.conf.get("neobank.catalog")
+bronze  = spark.conf.get("neobank.bronze_schema")
+silver  = spark.conf.get("neobank.silver_schema")
+gold  = spark.conf.get("neobank.gold_schema")
+spark.sql(f"USE CATALOG {catalog}")
+spark.sql(f"USE SCHEMA {gold}") 
 
 # ── Dimensions ───────────────────────────────────────────────────────────────
 @dlt.table(comment="Customer dimension.")
 def dim_users():
     return (
-        dlt.read("silver_users")
+        dlt.read(f"{catalog}.{silver}.silver_users")
         .withColumn("income_band",
             F.when(F.col("yearly_income") < 30000, "low")
              .when(F.col("yearly_income") < 80000, "mid")
@@ -31,20 +40,20 @@ def dim_users():
 
 @dlt.table(comment="Card dimension.")
 def dim_cards():
-    return dlt.read("silver_cards")
+    return dlt.read(f"{catalog}.{silver}.silver_cards")
 
 
 @dlt.table(comment="Merchant-category dimension built from MCC codes.")
 def dim_merchant():
     # Distinct merchants observed in transactions, enriched with MCC description.
-    tx = dlt.read("silver_transactions").select(
+    tx = dlt.read(f"{catalog}.{silver}.silver_transactions").select(
         "merchant_id", "merchant_city", "merchant_state", "mcc").dropDuplicates(["merchant_id"])
     return tx.withColumn("mcc_description", F.col("mcc").cast("string"))
 
 
 @dlt.table(comment="Date dimension for time-series analysis.")
 def dim_date():
-    dates = (dlt.read("silver_transactions").select(F.col("transaction_date").alias("date"))
+    dates = (dlt.read(f"{catalog}.{silver}.silver_transactions").select(F.col("transaction_date").alias("date"))
              .union(dlt.read("silver_notifications").select(F.col("sent_date").alias("date")))
              .where("date IS NOT NULL").distinct())
     return (dates
@@ -61,7 +70,7 @@ def dim_date():
 )
 def fact_transactions():
     return (
-        dlt.read("silver_transactions")
+        dlt.read(f"{catalog}.{silver}.silver_transactions")
         .select(
             "transaction_id", "client_id", "card_id", "merchant_id",
             "transaction_ts", "transaction_date",
@@ -73,12 +82,12 @@ def fact_transactions():
 
 @dlt.table(comment="Notification fact at grain = one row per notification.")
 def fact_notifications():
-    return dlt.read("silver_notifications").select(
+    return dlt.read(f"{catalog}.{silver}.silver_notifications").select(
         "notification_id", "client_id", "channel", "category",
         "sent_ts", "sent_date", "opened")
 
 
 @dlt.table(comment="Device activity fact at grain = one row per session/event.")
 def fact_device_activity():
-    return dlt.read("silver_device_events").select(
+    return dlt.read(f"{catalog}.{silver}.silver_device_events").select(
         "client_id", "device_id", "os", "event_type", "event_ts", "event_date")

@@ -9,9 +9,13 @@ from databricks.sdk.runtime import spark
 from pyspark.sql import functions as F
 
 catalog = spark.conf.get("neobank.catalog")
+bronze  = spark.conf.get("neobank.bronze_schema")
 volume = spark.conf.get("neobank.volume")
 root = f"/Volumes/{catalog}/bronze/{volume}"
 
+
+spark.sql(f"USE CATALOG {catalog}")
+spark.sql(f"USE SCHEMA {bronze}") 
 
 def _autoload(path, fmt, **opts):
     reader = (spark.readStream.format("cloudFiles")
