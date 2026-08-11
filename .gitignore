@@ -9,3 +9,4 @@ scratch/**
 **/explorations/**
 **/!explorations/README.md
 kaggle_data
+.pytest_cache
