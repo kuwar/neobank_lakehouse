@@ -14,7 +14,7 @@
 from pyspark import pipelines as dp
 from pyspark.sql import SparkSession
 
-from transforms import add_ingestion_metadata, build_autoloader
+from src.pipelines.bronze_transform_helper import add_ingestion_metadata, build_autoloader
 
 spark = SparkSession.getActiveSession()
 
