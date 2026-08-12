@@ -8,7 +8,6 @@ import dlt
 from databricks.sdk.runtime import spark
 from pyspark.sql import functions as F
 
-
 catalog = spark.conf.get("neobank.catalog")
 bronze  = spark.conf.get("neobank.bronze_schema")
 silver  = spark.conf.get("neobank.silver_schema")

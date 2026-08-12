@@ -3,7 +3,7 @@
 These run fully locally against a small in-memory DataFrame — no cluster,
 no cloud storage, no Databricks runtime.
 """
-from pyspark.sql import Row, functions as F
+from pyspark.sql import functions as F
 
 from pipelines.bronze_transform_helper import add_ingestion_metadata
 

@@ -7,8 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 from databricks.sdk.runtime import spark
 
-
-
 dbutils.widgets.text("catalog", "neobank_dev")
 dbutils.widgets.text("gold_schema", "gold")
 catalog = dbutils.widgets.get("catalog")

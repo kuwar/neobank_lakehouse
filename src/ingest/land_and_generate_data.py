@@ -7,8 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 from databricks.sdk.runtime import spark
 
-
-
 dbutils.widgets.text("catalog", "neobank_dev")
 dbutils.widgets.text("volume", "raw")
 dbutils.widgets.text("sample_rows", "500000")
@@ -36,8 +34,8 @@ for sub in ("transactions", "users", "cards", "mcc", "device_events", "notificat
 try:
     import kagglehub
     src = kagglehub.dataset_download("computingvictor/transactions-fraud-datasets")
-    import shutil
     import os
+    import shutil
     for fname, sub in [
         ("users_data.csv", "users"),
         ("cards_data.csv", "cards"),
