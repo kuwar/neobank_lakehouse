@@ -36,7 +36,8 @@ for sub in ("transactions", "users", "cards", "mcc", "device_events", "notificat
 try:
     import kagglehub
     src = kagglehub.dataset_download("computingvictor/transactions-fraud-datasets")
-    import shutil, os
+    import shutil
+    import os
     for fname, sub in [
         ("users_data.csv", "users"),
         ("cards_data.csv", "cards"),

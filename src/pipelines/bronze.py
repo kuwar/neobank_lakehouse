@@ -1,54 +1,76 @@
-# Databricks notebook source
 # ─────────────────────────────────────────────────────────────────────────────
-# BRONZE — raw, append-only ingest from the volume using Auto Loader (cloudFiles).
-# Auto Loader scales to millions of files and only processes new data each run,
-# which is what makes this pipeline incremental and cost-efficient.
+# BRONZE — raw, append-only ingest, on Apache Spark Declarative Pipelines (SDP).
+#
+# Multi-schema publishing: this file emits tables into the BRONZE schema by
+# giving each @dp.table a FULLY-QUALIFIED name (catalog.schema.table). This lets
+# one pipeline span bronze/silver/gold — a silver file would qualify into the
+# silver schema the same way — instead of every dataset landing in the single
+# default schema set in the pipeline config.
+#
+# Requires the pipeline to be in DEFAULT publishing mode (the default for new
+# pipelines) and Unity Catalog. You need USE CATALOG on the target catalog and
+# create privileges on the target schema; the schema is created on write if absent.
 # ─────────────────────────────────────────────────────────────────────────────
-import dlt
-from databricks.sdk.runtime import spark
-from pyspark.sql import functions as F
+from pyspark import pipelines as dp
+from pyspark.sql import SparkSession
 
-catalog = spark.conf.get("neobank.catalog")
-bronze  = spark.conf.get("neobank.bronze_schema")
-volume = spark.conf.get("neobank.volume")
-root = f"/Volumes/{catalog}/bronze/{volume}"
+from transforms import add_ingestion_metadata, build_autoloader
+
+spark = SparkSession.getActiveSession()
 
 
-spark.sql(f"USE CATALOG {catalog}")
-spark.sql(f"USE SCHEMA {bronze}") 
-
-def _autoload(path, fmt, **opts):
-    reader = (spark.readStream.format("cloudFiles")
-              .option("cloudFiles.format", fmt)
-              .option("cloudFiles.inferColumnTypes", "true")
-              .option("cloudFiles.schemaEvolutionMode", "addNewColumns"))
-    for k, v in opts.items():
-        reader = reader.option(k, v)
-    return (reader.load(path)
-            .withColumn("_ingested_at", F.current_timestamp())
-            .withColumn("_source_file", F.col("_metadata.file_path")))
+def configure(spark):
+    """Read pipeline config. Returns (catalog, bronze_schema, source_root)."""
+    catalog = spark.conf.get("neobank.catalog")
+    bronze = spark.conf.get("neobank.bronze_schema")
+    volume = spark.conf.get("neobank.volume")
+    root = f"/Volumes/{catalog}/bronze/{volume}"
+    return catalog, bronze, root
 
 
-@dlt.table(comment="Raw transactions as delivered by the source.")
+catalog, bronze, root = configure(spark)
+
+
+def _qualify(table: str) -> str:
+    """Build a fully-qualified catalog.schema.table name from pipeline config,
+    so the target schema stays config-driven rather than hard-coded."""
+    return f"{catalog}.{bronze}.{table}"
+
+
+def _ingest(path, fmt, **opts):
+    """Load a source with Auto Loader and attach audit columns.
+
+    NOTE: format("cloudFiles") is Auto Loader — Databricks-only. For local
+    open-source SDP, swap for spark.readStream.format(fmt).load(path).
+    """
+    return add_ingestion_metadata(build_autoloader(spark, path, fmt, **opts))
+
+
+@dp.table(name=_qualify("bronze_transactions"),
+          comment="Raw transactions as delivered by the source.")
 def bronze_transactions():
-    return _autoload(f"{root}/transactions", "csv", header="true")
+    return _ingest(f"{root}/transactions", "csv", header="true")
 
 
-@dlt.table(comment="Raw users/customers.")
+@dp.table(name=_qualify("bronze_users"),
+          comment="Raw users/customers.")
 def bronze_users():
-    return _autoload(f"{root}/users", "csv", header="true")
+    return _ingest(f"{root}/users", "csv", header="true")
 
 
-@dlt.table(comment="Raw payment cards.")
+@dp.table(name=_qualify("bronze_cards"),
+          comment="Raw payment cards.")
 def bronze_cards():
-    return _autoload(f"{root}/cards", "csv", header="true")
+    return _ingest(f"{root}/cards", "csv", header="true")
 
 
-@dlt.table(comment="Raw device login/session events.")
+@dp.table(name=_qualify("bronze_device_events"),
+          comment="Raw device login/session events.")
 def bronze_device_events():
-    return _autoload(f"{root}/device_events", "json")
+    return _ingest(f"{root}/device_events", "json")
 
 
-@dlt.table(comment="Raw notification delivery events.")
+@dp.table(name=_qualify("bronze_notifications"),
+          comment="Raw notification delivery events.")
 def bronze_notifications():
-    return _autoload(f"{root}/notifications", "json")
+    return _ingest(f"{root}/notifications", "json")

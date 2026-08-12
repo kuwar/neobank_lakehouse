@@ -1,5 +1,5 @@
 [project]
-name = "dab_demo"
+name = "neobank_datalake"
 version = "0.0.1"
 authors = [{ name = "kuwarsaurav21@gmail.com" }]
 requires-python = ">=3.10,<3.13"
@@ -9,6 +9,7 @@ dependencies = [
     #
     # LIMITATION: for pipelines, dependencies are cached during development;
     # add dependencies to the 'environment' section of your pipeline.yml file instead
+    "pyspark (>=4.2.0,<5.0.0)"
 ]
 
 [dependency-groups]
