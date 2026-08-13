@@ -5,7 +5,10 @@
 # once. Every consumer — SQL, dashboards, notebooks, Genie — queries the same
 # governed definition with MEASURE(), so revenue means the same thing everywhere.
 # ─────────────────────────────────────────────────────────────────────────────
-from databricks.sdk.runtime import spark
+from context import get_dbutils, get_spark
+
+spark = get_spark()
+dbutils = get_dbutils(spark)
 
 dbutils.widgets.text("catalog", "neobank_dev")
 dbutils.widgets.text("gold_schema", "gold")

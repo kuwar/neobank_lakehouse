@@ -1,3 +1,4 @@
+# Databricks notebook source
 # ─────────────────────────────────────────────────────────────────────────────
 # BRONZE — raw, append-only ingest, on Apache Spark Declarative Pipelines (SDP).
 #
@@ -14,7 +15,7 @@
 from pyspark import pipelines as dp
 from pyspark.sql import SparkSession
 
-from src.pipelines.bronze_transform_helper import add_ingestion_metadata, build_autoloader
+from pipelines.bronze_transform_helper import add_ingestion_metadata, build_autoloader
 
 spark = SparkSession.getActiveSession()
 
