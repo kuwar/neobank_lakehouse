@@ -1,11 +1,10 @@
 # Databricks notebook source
 # ─────────────────────────────────────────────────────────────────────────────
 # SILVER — clean, type, conform, and enforce data quality.
-# @dlt.expect_* rules make quality a first-class, monitored part of the pipeline:
+# @dp.expect_* rules make quality a first-class, monitored part of the pipeline:
 # bad rows are dropped (and counted) instead of silently poisoning analytics.
 # ─────────────────────────────────────────────────────────────────────────────
-import dlt
-from databricks.sdk.runtime import spark
+from pyspark import pipelines as dp
 from pyspark.sql import functions as F
 
 catalog = spark.conf.get("neobank.catalog")
@@ -16,12 +15,12 @@ spark.sql(f"USE SCHEMA {silver}")
 
 
 # ── Users ────────────────────────────────────────────────────────────────────
-@dlt.table(comment="Cleaned customers, one row per client.")
-@dlt.expect_or_drop("valid_client", "client_id IS NOT NULL")
-@dlt.expect("plausible_age", "current_age BETWEEN 16 AND 110")
+@dp.table(comment="Cleaned customers, one row per client.")
+@dp.expect_or_drop("valid_client", "client_id IS NOT NULL")
+@dp.expect("plausible_age", "current_age BETWEEN 16 AND 110")
 def silver_users():
     return (
-        dlt.read(f"{catalog}.{bronze}.bronze_users")
+        dp.read(f"{catalog}.{bronze}.bronze_users")
         .select(
             F.col("id").cast("int").alias("client_id"),
             F.col("current_age").cast("int").alias("current_age"),
@@ -35,11 +34,11 @@ def silver_users():
 
 
 # ── Cards ────────────────────────────────────────────────────────────────────
-@dlt.table(comment="Cleaned cards.")
-@dlt.expect_or_drop("valid_card", "card_id IS NOT NULL AND client_id IS NOT NULL")
+@dp.table(comment="Cleaned cards.")
+@dp.expect_or_drop("valid_card", "card_id IS NOT NULL AND client_id IS NOT NULL")
 def silver_cards():
     return (
-        dlt.read(f"{catalog}.{bronze}.bronze_cards")
+        dp.read(f"{catalog}.{bronze}.bronze_cards")
         .select(
             F.col("id").cast("int").alias("card_id"),
             F.col("client_id").cast("int").alias("client_id"),
@@ -52,12 +51,12 @@ def silver_cards():
 
 
 # ── Transactions ─────────────────────────────────────────────────────────────
-@dlt.table(comment="Cleaned transactions with parsed amount and MCC join.")
-@dlt.expect_or_drop("valid_txn", "transaction_id IS NOT NULL AND client_id IS NOT NULL")
-@dlt.expect("nonzero_amount", "amount_usd <> 0")
+@dp.table(comment="Cleaned transactions with parsed amount and MCC join.")
+@dp.expect_or_drop("valid_txn", "transaction_id IS NOT NULL AND client_id IS NOT NULL")
+@dp.expect("nonzero_amount", "amount_usd <> 0")
 def silver_transactions():
     tx = (
-        dlt.read(f"{catalog}.{bronze}.bronze_transactions")
+        dp.read(f"{catalog}.{bronze}.bronze_transactions")
         .select(
             F.col("id").cast("long").alias("transaction_id"),
             F.to_timestamp("date").alias("transaction_ts"),
@@ -78,11 +77,11 @@ def silver_transactions():
 
 
 # ── Device events ────────────────────────────────────────────────────────────
-@dlt.table(comment="Cleaned device/session events.")
-@dlt.expect_or_drop("valid_event", "client_id IS NOT NULL AND event_ts IS NOT NULL")
+@dp.table(comment="Cleaned device/session events.")
+@dp.expect_or_drop("valid_event", "client_id IS NOT NULL AND event_ts IS NOT NULL")
 def silver_device_events():
     return (
-        dlt.read(f"{catalog}.{bronze}.bronze_device_events")
+        dp.read(f"{catalog}.{bronze}.bronze_device_events")
         .select(
             "client_id", "device_id", "os", "event_type", "ip",
             F.col("event_ts").cast("timestamp").alias("event_ts"),
@@ -92,11 +91,11 @@ def silver_device_events():
 
 
 # ── Notifications ────────────────────────────────────────────────────────────
-@dlt.table(comment="Cleaned notification deliveries.")
-@dlt.expect_or_drop("valid_notif", "notification_id IS NOT NULL AND client_id IS NOT NULL")
+@dp.table(comment="Cleaned notification deliveries.")
+@dp.expect_or_drop("valid_notif", "notification_id IS NOT NULL AND client_id IS NOT NULL")
 def silver_notifications():
     return (
-        dlt.read(f"{catalog}.{bronze}.bronze_notifications")
+        dp.read(f"{catalog}.{bronze}.bronze_notifications")
         .select(
             "notification_id",
             F.col("client_id").cast("int").alias("client_id"),

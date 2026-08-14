@@ -5,16 +5,22 @@ resources:
     neobank_medallion:
       name: neobank_medallion
       serverless: true                 # required on Free Edition
-      catalog: ${var.catalog}         # Unity Catalog target
+      catalog: ${var.catalog}          # Unity Catalog target
       schema: ${var.gold_schema}       # default publish schema; layers set their own
-      photon: true
       continuous: false                # triggered runs (cheaper); set true for streaming
+
+      # Serverless installs custom code via the environment, NOT via libraries: - whl:
+      environment:
+        dependencies:
+          - ../dist/*.whl
+
       configuration:
         neobank.catalog: ${var.catalog}
         neobank.bronze_schema: ${var.bronze_schema}
         neobank.silver_schema: ${var.silver_schema}
         neobank.gold_schema: ${var.gold_schema}
         neobank.volume: ${var.volume}
+
       libraries:
         - notebook:
             path: ../src/pipelines/bronze.py

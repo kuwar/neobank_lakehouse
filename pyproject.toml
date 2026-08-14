@@ -1,15 +1,12 @@
 [project]
 name = "neobank_datalake"
 version = "0.0.1"
-authors = [{ name = "kuwarsaurav21@gmail.com" }]
+description = "Neobank data lake pipelines and helpers for Databricks."
+readme = "README.md"
 requires-python = ">=3.10,<3.13"
+authors = [{ name = "KUWAR Shaurave", email = "kuwarsaurav21@gmail.com" }]
 dependencies = [
-    # Any dependencies for jobs and pipelines in this project can be added here
-    # See also https://docs.databricks.com/dev-tools/bundles/library-dependencies
-    #
-    # LIMITATION: for pipelines, dependencies are cached during development;
-    # add dependencies to the 'environment' section of your pipeline.yml file instead
-    "pyspark (>=4.2.0,<5.0.0)"
+    "pyspark>=4.2.0,<5.0.0",
 ]
 
 [dependency-groups]
@@ -21,12 +18,12 @@ dev = [
     "ipykernel",
 ]
 
-[project.scripts]
-main = "dab_demo.main:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/neobank_datalake"]
 
 [tool.ruff]
 line-length = 120

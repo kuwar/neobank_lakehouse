@@ -20,12 +20,16 @@ resources:
       tasks:
         # 1) Download Kaggle data into the volume + generate synthetic events.
         - task_key: land_data
-          notebook_task:
-            notebook_path: ../src/ingest/land_and_generate_data.py
-            base_parameters:
-              catalog: ${var.catalog}
-              volume: ${var.volume}
-              sample_rows: ${var.sample_rows}
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/ingest/land_and_generate_data.py
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+              - "--volume"
+              - "${var.volume}"
+              - "--sample-rows"
+              - "${var.sample_rows}"
 
         # 2) Run the medallion pipeline (bronze -> silver -> gold).
         - task_key: build_medallion
@@ -38,8 +42,19 @@ resources:
         - task_key: build_metric_views
           depends_on:
             - task_key: build_medallion
-          notebook_task:
-            notebook_path: ../src/metrics/create_metric_views.py
-            base_parameters:
-              catalog: ${var.catalog}
-              gold_schema: ${var.gold_schema}
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/metrics/create_metric_views.py
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+              - "--gold-schema"
+              - "${var.gold_schema}"
+              
+      # Serverless wheel install — this DOES work for spark_python_task
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"          # serverless env version; bump if validate complains
+            dependencies:
+              - ../dist/*.whl

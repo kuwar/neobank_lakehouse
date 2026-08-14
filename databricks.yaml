@@ -6,6 +6,13 @@
 bundle:
   name: neobank_lakehouse
 
+artifacts:
+  neobank_wheel:
+    type: whl
+    build: uv build --wheel
+    path: .
+    dynamic_version: true
+    
 include:
   - resources/*.yaml
 

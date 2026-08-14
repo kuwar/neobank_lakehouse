@@ -1,19 +1,22 @@
-# Databricks notebook source
 # ─────────────────────────────────────────────────────────────────────────────
 # SEMANTIC LAYER — Unity Catalog metric views (Business Semantics).
 # A metric view defines DIMENSIONS (what you slice by) and MEASURES (the numbers)
 # once. Every consumer — SQL, dashboards, notebooks, Genie — queries the same
 # governed definition with MEASURE(), so revenue means the same thing everywhere.
 # ─────────────────────────────────────────────────────────────────────────────
-from context import get_dbutils, get_spark
+import argparse
+
+from neobank_datalake.db_context import get_spark
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--catalog", required=True)
+parser.add_argument("--gold-schema")
+args = parser.parse_args()
 
 spark = get_spark()
-dbutils = get_dbutils(spark)
 
-dbutils.widgets.text("catalog", "neobank_dev")
-dbutils.widgets.text("gold_schema", "gold")
-catalog = dbutils.widgets.get("catalog")
-gold = dbutils.widgets.get("gold_schema")
+catalog = args.catalog
+gold = args.gold_schema
 
 # COMMAND ----------
 # Metric view 1 — Transactions & spend.

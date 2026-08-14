@@ -13,11 +13,11 @@
 # create privileges on the target schema; the schema is created on write if absent.
 # ─────────────────────────────────────────────────────────────────────────────
 from pyspark import pipelines as dp
-from pyspark.sql import SparkSession
 
-from pipelines.bronze_transform_helper import add_ingestion_metadata, build_autoloader
+from neobank_datalake.db_context import get_spark
+from neobank_datalake.pipelines.bronze_transform_helper import add_ingestion_metadata, build_autoloader
 
-spark = SparkSession.getActiveSession()
+spark = get_spark()
 
 
 def configure(spark):

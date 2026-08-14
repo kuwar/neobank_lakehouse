@@ -1,44 +1,46 @@
-# Databricks notebook source
 # ─────────────────────────────────────────────────────────────────────────────
 # Land raw data into a Unity Catalog volume:
 #   1. Download the Kaggle transactions/users/cards dataset.
 #   2. Generate synthetic device + notification events keyed to real users.
 # The medallion pipeline then reads these files with Auto Loader.
 # ─────────────────────────────────────────────────────────────────────────────
-from context import get_dbutils, get_spark
+import argparse
+import os
+import shutil
+
+from pyspark.sql import functions as F
+
+from neobank_datalake.db_context import get_spark
 
 spark = get_spark()
-dbutils = get_dbutils(spark)
 
-dbutils.widgets.text("catalog", "neobank_dev")
-dbutils.widgets.text("volume", "raw")
-dbutils.widgets.text("sample_rows", "500000")
+parser = argparse.ArgumentParser()
+parser.add_argument("--catalog", required=True)
+parser.add_argument("--volume", required=True)
+parser.add_argument("--sample-rows", type=int, default=0)   # default avoids `None > 0`
+args = parser.parse_args()
 
-catalog = dbutils.widgets.get("catalog")
-volume = dbutils.widgets.get("volume")
-sample_rows = int(dbutils.widgets.get("sample_rows"))
+catalog = args.catalog
+volume = args.volume
+sample_rows = args.sample_rows
 
 vol_root = f"/Volumes/{catalog}/bronze/{volume}"
 
-# COMMAND ----------
 # Ensure catalog / schema / volume exist (idempotent).
 for schema in ("bronze", "silver", "gold"):
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
 spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog}.bronze.{volume}")
-for sub in ("transactions", "users", "cards", "mcc", "device_events", "notifications"):
-    dbutils.fs.mkdirs(f"{vol_root}/{sub}")
 
-# COMMAND ----------
+# UC volumes are ordinary local paths — use os/shutil, never dbutils.fs.
+for sub in ("transactions", "users", "cards", "mcc", "device_events", "notifications"):
+    os.makedirs(f"{vol_root}/{sub}", exist_ok=True)
+
 # 1) Download the Kaggle dataset.
 #    Requires Kaggle credentials. Locally: `pip install kagglehub` and set
 #    KAGGLE_USERNAME / KAGGLE_KEY (or ~/.kaggle/kaggle.json).
-#    Dataset: computingvictor/transactions-fraud-datasets
-#      users_data.csv · cards_data.csv · transactions_data.csv · mcc_codes.json
 try:
     import kagglehub
     src = kagglehub.dataset_download("computingvictor/transactions-fraud-datasets")
-    import os
-    import shutil
     for fname, sub in [
         ("users_data.csv", "users"),
         ("cards_data.csv", "cards"),
@@ -54,25 +56,20 @@ except Exception as e:
     print("Kaggle download skipped:", e)
     print(f"Upload the CSVs into {vol_root}/<users|cards|transactions|mcc>/ and re-run.")
 
-# COMMAND ----------
 # Optional: cap transactions volume while learning (keeps Free Edition quota safe).
 if sample_rows > 0:
-    import glob
-    tx_files = glob.glob(f"{vol_root}/transactions/transactions_data.csv")
-    if tx_files:
-        df = spark.read.option("header", True).csv(f"{vol_root}/transactions/transactions_data.csv")
+    tx_csv = f"{vol_root}/transactions/transactions_data.csv"
+    if os.path.exists(tx_csv):
+        df = spark.read.option("header", True).csv(tx_csv)
         (df.limit(sample_rows)
            .coalesce(1)
            .write.mode("overwrite").option("header", True)
            .csv(f"{vol_root}/transactions_sampled"))
-        dbutils.fs.rm(f"{vol_root}/transactions", recurse=True)
-        dbutils.fs.mv(f"{vol_root}/transactions_sampled", f"{vol_root}/transactions", recurse=True)
+        shutil.rmtree(f"{vol_root}/transactions")
+        shutil.move(f"{vol_root}/transactions_sampled", f"{vol_root}/transactions")
         print(f"Capped transactions at {sample_rows:,} rows")
 
-# COMMAND ----------
 # 2) Generate synthetic device + notification events keyed to real client_ids.
-from pyspark.sql import functions as F
-
 users = (spark.read.option("header", True)
          .csv(f"{vol_root}/users/users_data.csv")
          .select(F.col("id").cast("int").alias("client_id"))
