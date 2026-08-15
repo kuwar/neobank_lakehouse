@@ -12,11 +12,10 @@
 # pipelines) and Unity Catalog. You need USE CATALOG on the target catalog and
 # create privileges on the target schema; the schema is created on write if absent.
 # ─────────────────────────────────────────────────────────────────────────────
-from pyspark import pipelines as dp
-
-from neobank_datalake.db_context import get_spark
+from neobank_datalake.db_context import get_dlt, get_spark
 from neobank_datalake.pipelines.bronze_transform_helper import add_ingestion_metadata, build_autoloader
 
+dp = get_dlt()
 spark = get_spark()
 
 

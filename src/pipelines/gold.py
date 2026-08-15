@@ -9,11 +9,11 @@
 #   dim_users ─── fact_notifications
 #   dim_users ─── fact_device_activity
 # ─────────────────────────────────────────────────────────────────────────────
-from pyspark import pipelines as dp
 from pyspark.sql import functions as F
 
-from neobank_datalake.db_context import get_spark
+from neobank_datalake.db_context import get_dlt, get_spark
 
+dp = get_dlt()
 spark = get_spark()
 
 catalog = spark.conf.get("neobank.catalog")

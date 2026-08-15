@@ -4,8 +4,12 @@
 # @dp.expect_* rules make quality a first-class, monitored part of the pipeline:
 # bad rows are dropped (and counted) instead of silently poisoning analytics.
 # ─────────────────────────────────────────────────────────────────────────────
-from pyspark import pipelines as dp
 from pyspark.sql import functions as F
+
+from neobank_datalake.db_context import get_dlt, get_spark
+
+dp = get_dlt()
+spark = get_spark()
 
 catalog = spark.conf.get("neobank.catalog")
 bronze  = spark.conf.get("neobank.bronze_schema")

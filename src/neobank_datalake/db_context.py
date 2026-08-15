@@ -13,13 +13,14 @@ the databricks-connect namespace.
 """
 from __future__ import annotations
 
+from types import ModuleType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # Import only for type checkers / IDEs. Not needed (or installed) at runtime,
     # so the wheel carries no pyspark dependency.
-    from pyspark.sql import SparkSession
     from databricks.sdk.dbutils import RemoteDbUtils
+    from pyspark.sql import SparkSession
 
 
 def get_spark() -> SparkSession:
@@ -66,3 +67,35 @@ def get_dbutils(spark: SparkSession) -> RemoteDbUtils | None:
         return spark.session.dbutils  # type: ignore[attr-defined]
     except Exception:
         return None
+    
+
+
+
+def get_dlt() -> ModuleType:
+    """Return the Lakeflow / DLT decorator module, portably.
+
+    Import this at the TOP of a pipeline module, before any decorated function,
+    and use the returned handle for decorators:
+
+        from neobank_datalake.db_context import get_dlt
+        dp = get_dlt()
+
+        @dp.table
+        def my_bronze():
+            ...
+
+    Resolution order:
+      1. `pyspark.pipelines` — current Lakeflow / Spark Declarative Pipelines
+         (the runtime provides it; also available via databricks-connect).
+      2. `dlt` — the older DLT stub (databricks-dlt), pre-rename, for local
+         linting/authoring of legacy pipeline files.
+
+    Note: like all DLT/Lakeflow code, the returned decorators only do real work
+    when the file is evaluated inside a Lakeflow pipeline; importing a pipeline
+    module as a standalone script won't execute the pipeline.
+    """
+    try:
+        from pyspark import pipelines as dp
+    except ImportError:
+        import dlt as dp
+    return dp

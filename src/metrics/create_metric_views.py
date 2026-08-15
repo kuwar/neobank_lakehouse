@@ -6,14 +6,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
 import argparse
 
-# from neobank_datalake.db_context import get_spark
+from neobank_datalake.db_context import get_spark
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--catalog", required=True)
 parser.add_argument("--gold-schema")
 args = parser.parse_args()
 
-# spark = get_spark()
+spark = get_spark()
 
 catalog = args.catalog
 gold = args.gold_schema
