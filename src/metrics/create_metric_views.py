@@ -6,19 +6,18 @@
 # ─────────────────────────────────────────────────────────────────────────────
 import argparse
 
-from neobank_datalake.db_context import get_spark
+# from neobank_datalake.db_context import get_spark
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--catalog", required=True)
 parser.add_argument("--gold-schema")
 args = parser.parse_args()
 
-spark = get_spark()
+# spark = get_spark()
 
 catalog = args.catalog
 gold = args.gold_schema
 
-# COMMAND ----------
 # Metric view 1 — Transactions & spend.
 spark.sql(f"""
 CREATE OR REPLACE VIEW {catalog}.{gold}.mv_transactions
@@ -61,7 +60,6 @@ measures:
 $$
 """)
 
-# COMMAND ----------
 # Metric view 2 — Customer engagement (notifications + device activity).
 spark.sql(f"""
 CREATE OR REPLACE VIEW {catalog}.{gold}.mv_engagement
@@ -93,26 +91,25 @@ measures:
 $$
 """)
 
-# COMMAND ----------
 # Query the governed metrics with MEASURE() — grouped by ANY dimension at runtime.
-print("Spend by merchant category:")
-spark.sql(f"""
-  SELECT `Merchant category`, MEASURE(`Total spend`) AS spend,
-         MEASURE(`Active customers`) AS customers
-  FROM {catalog}.{gold}.mv_transactions
-  GROUP BY `Merchant category`
-  ORDER BY spend DESC
-  LIMIT 10
-""").show(truncate=False)
+# print("Spend by merchant category:")
+# spark.sql(f"""
+#   SELECT `Merchant category`, MEASURE(`Total spend`) AS spend,
+#          MEASURE(`Active customers`) AS customers
+#   FROM {catalog}.{gold}.mv_transactions
+#   GROUP BY `Merchant category`
+#   ORDER BY spend DESC
+#   LIMIT 10
+# """).show(truncate=False)
 
-print("Notification open rate by channel:")
-spark.sql(f"""
-  SELECT `Channel`, MEASURE(`Open rate`) AS open_rate,
-         MEASURE(`Notifications sent`) AS sent
-  FROM {catalog}.{gold}.mv_engagement
-  GROUP BY `Channel`
-  ORDER BY sent DESC
-""").show(truncate=False)
+# print("Notification open rate by channel:")
+# spark.sql(f"""
+#   SELECT `Channel`, MEASURE(`Open rate`) AS open_rate,
+#          MEASURE(`Notifications sent`) AS sent
+#   FROM {catalog}.{gold}.mv_engagement
+#   GROUP BY `Channel`
+#   ORDER BY sent DESC
+# """).show(truncate=False)
 
 # TIP: point an AI/BI Genie space at these two metric views. Because the KPIs are
 # governed, natural-language questions ("open rate for push last month?") resolve

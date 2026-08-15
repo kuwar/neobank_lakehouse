@@ -3,10 +3,9 @@ name = "neobank_datalake"
 version = "0.0.1"
 description = "Neobank data lake pipelines and helpers for Databricks."
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.12"
 authors = [{ name = "KUWAR Shaurave", email = "kuwarsaurav21@gmail.com" }]
 dependencies = [
-    "pyspark>=4.2.0,<5.0.0",
 ]
 
 [dependency-groups]
@@ -14,7 +13,7 @@ dev = [
     "pytest",
     "ruff",
     "databricks-dlt",
-    "databricks-connect>=15.4,<15.5",
+    "databricks-connect>=16.3,<16.4",
     "ipykernel",
 ]
 

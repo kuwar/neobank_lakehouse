@@ -50,11 +50,11 @@ resources:
               - "${var.catalog}"
               - "--gold-schema"
               - "${var.gold_schema}"
-              
+
       # Serverless wheel install — this DOES work for spark_python_task
       environments:
         - environment_key: default
           spec:
-            environment_version: "2"          # serverless env version; bump if validate complains
+            environment_version: "3"          # serverless env version; bump if validate complains
             dependencies:
               - ../dist/*.whl
