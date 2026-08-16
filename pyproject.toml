@@ -13,8 +13,9 @@ dev = [
     "pytest",
     "ruff",
     "databricks-dlt",
-    "databricks-connect>=16.3,<16.4",
+    "databricks-connect",
     "ipykernel",
+    "zstandard (>=0.25.0,<0.26.0)",
 ]
 
 [build-system]

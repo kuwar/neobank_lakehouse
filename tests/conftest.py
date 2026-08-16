@@ -1,40 +1,30 @@
 """Shared fixtures, auto-discovered by pytest for every test in this tree.
 
-pytest loads this file automatically (no import needed). Any fixture defined
-here is available to every test module in `tests/` and its subdirectories,
-resolved by matching the fixture name to a test's parameter name.
+The `spark` fixture is a serverless session via Databricks Connect (through the
+project's one acquisition helper), so tests exercise the real engine and Unity
+Catalog semantics — driven from your laptop / CI.
 """
 import pytest
-from pyspark.sql import Row, SparkSession
+from pyspark.sql import Row
 
 
 @pytest.fixture(scope="session")
 def spark():
-    """A local Spark session, built once for the whole test run.
+    """Serverless Spark via Databricks Connect, built once for the whole run.
 
-    scope="session" is the key choice: a fresh JVM per test would make the
-    suite crawl. The teardown after `yield` runs even if a test fails.
+    Reuses `get_spark()` so tests and production acquire the session identically.
+    We do NOT call .stop() — the serverless session is managed remotely and is
+    shared; stopping it is unnecessary and can disrupt a reused connection.
     """
-    session = (
-        SparkSession.builder
-        .master("local[2]")
-        .appName("neobank-lakehouse-unit-tests")
-        .config("spark.sql.shuffle.partitions", "1")   # tiny data -> 1 partition
-        .config("spark.ui.enabled", "false")           # no web UI in tests
-        .getOrCreate()
-    )
-    yield session
-    session.stop()
+    from neobank_datalake.db_context import get_spark
+
+    return get_spark()
 
 
 @pytest.fixture
 def raw_batch(spark):
-    """A small DataFrame that mimics what Auto Loader hands to our transform:
-    real columns plus a `_metadata` struct carrying `file_path`.
-
-    Function-scoped (the default) so every test gets a clean copy. It depends
-    on the `spark` fixture, which pytest resolves automatically.
-    """
+    """A small DataFrame mimicking Auto Loader's output: real columns plus a
+    `_metadata` struct carrying `file_path`. Function-scoped for a clean copy."""
     return spark.createDataFrame([
         Row(user_id="a", amount=10, _metadata=Row(file_path="/vol/tx/f1.csv")),
         Row(user_id="b", amount=20, _metadata=Row(file_path="/vol/tx/f2.csv")),
