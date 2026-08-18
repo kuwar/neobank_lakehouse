@@ -12,3 +12,6 @@ kaggle_data
 .pytest_cache
 .direnv/
 .env
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
