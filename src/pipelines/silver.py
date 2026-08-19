@@ -28,9 +28,17 @@ def silver_users():
         .select(
             F.col("id").cast("int").alias("client_id"),
             F.col("current_age").cast("int").alias("current_age"),
+            F.col("retirement_age").cast("int").alias("retirement_age"),
+            F.col("birth_year").cast("int").alias("birth_year"),
+            F.col("birth_month").cast("int").alias("birth_month"),
             F.col("gender"),
-            F.col("credit_score").cast("int").alias("credit_score"),
+            F.col("address"),
+            F.col("latitude"),
+            F.col("longitude"),
+            F.regexp_replace("per_capita_income", r"[$,]", "").cast("double").alias("per_capita_income"),
             F.regexp_replace("yearly_income", r"[$,]", "").cast("double").alias("yearly_income"),
+            F.regexp_replace("total_debt", r"[$,]", "").cast("double").alias("total_debt"),
+            F.col("credit_score").cast("int").alias("credit_score"),
             F.col("num_credit_cards").cast("int").alias("num_credit_cards"),
         )
         .dropDuplicates(["client_id"])
@@ -48,8 +56,20 @@ def silver_cards():
             F.col("client_id").cast("int").alias("client_id"),
             F.col("card_brand"),
             F.col("card_type"),
+            F.col("card_number"),
+            F.col("expires"),
+            F.col("cvv"),
+            F.col("has_chip"),
+            F.col("num_cards_issued"),
             F.regexp_replace("credit_limit", r"[$,]", "").cast("double").alias("credit_limit"),
+            F.col("acct_open_date"),
+            F.col("year_pin_last_changed"),
+            F.col("card_on_dark_web"),
         )
+        # open date -> first of the month
+        .withColumn("acct_open_date", F.to_date(F.col("acct_open_date"), "MM/yyyy"))
+        # expiry -> parse to first of month, then push to the LAST day (valid-through)
+        .withColumn("expires", F.last_day(F.to_date(F.col("expires"), "MM/yyyy")))
         .dropDuplicates(["card_id"])
     )
 
@@ -72,10 +92,25 @@ def silver_transactions():
             F.col("merchant_id").cast("int").alias("merchant_id"),
             F.col("merchant_city"),
             F.col("merchant_state"),
+            F.col("zip"),
             F.col("mcc").cast("int").alias("mcc"),
             F.coalesce(F.col("errors"), F.lit("")).alias("errors"),
         )
         .withColumn("is_declined", F.col("errors") != "")
+        # All the online transaction has merchant state as null
+        # so fill it with 'ONLINE' in original transactions
+        .withColumn(
+            "merchant_state", 
+            F.when(F.col("merchant_state").isNull(), F.lit("ONLINE")).otherwise(F.col("merchant_state"))
+        )
+        # set zip to 'ONLINE' if the merchant_city is 'ONLINE' 
+        # and set zip to '' if zip is null
+        .withColumn(
+            "zip",
+            F.when(F.col("merchant_city") == "ONLINE", F.lit("ONLINE"))
+            .when(F.col("zip").isNull(), F.lit(""))
+            .otherwise(F.col("zip").cast("long").cast("string"))
+        )
     )
     return tx.withColumn("transaction_date", F.to_date("transaction_ts"))
 
