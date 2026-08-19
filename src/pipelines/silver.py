@@ -5,6 +5,7 @@
 # bad rows are dropped (and counted) instead of silently poisoning analytics.
 # ─────────────────────────────────────────────────────────────────────────────
 from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 from neobank_datalake.db_context import get_dlt, get_spark
 
@@ -87,7 +88,7 @@ def silver_transactions():
             F.col("client_id").cast("int").alias("client_id"),
             F.col("card_id").cast("int").alias("card_id"),
             # Amounts arrive like "$-77.00" — strip symbols and cast.
-            F.regexp_replace("amount", r"[$,]", "").cast("double").alias("amount_usd"),
+            F.regexp_replace("amount", r"[$,]", "").cast("double").alias("amount"),
             F.col("use_chip"),
             F.col("merchant_id").cast("int").alias("merchant_id"),
             F.col("merchant_city"),
@@ -113,6 +114,21 @@ def silver_transactions():
         )
     )
     return tx.withColumn("transaction_date", F.to_date("transaction_ts"))
+
+
+# ── MCC codes ────────────────────────────────────────────────────────────
+@dp.materialized_view(
+    name="silver_mcc_codes",
+    comment="Merchant Category Codes: one row per code.",
+)
+@dp.expect_all_or_drop({"mcc_code_valid": "mcc_code RLIKE '^[0-9]{4}$'"})
+def silver_mcc_codes():
+    return (
+        dp.read("bronze_mcc_codes")
+        .select(F.from_json("value", T.MapType(T.StringType(), T.StringType())).alias("m"))
+        .select(F.explode("m").alias("mcc", "mcc_description"))
+        .withColumn("mcc", F.col("mcc").cast("integer"))
+    )
 
 
 # ── Device events ────────────────────────────────────────────────────────────

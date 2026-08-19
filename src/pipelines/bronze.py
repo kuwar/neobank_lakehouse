@@ -63,6 +63,18 @@ def bronze_users():
 def bronze_cards():
     return _ingest(f"{root}/cards", "csv", header="true")
 
+##-------- MCC_codes---------------------
+@dp.materialized_view(
+    namme=_qualify("bronze_mcc_codes"),
+    comment="Raw mcc lookup table"
+)
+def bronze_mcc_codes():    
+    return add_ingestion_metadata(
+        spark.read.text(
+            f"{root}/mcc",
+            wholetext=True,          # read entire file as a single string (handles multi-line)
+        )
+    )
 
 @dp.table(name=_qualify("bronze_device_events"),
           comment="Raw device login/session events.")

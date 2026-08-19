@@ -47,17 +47,24 @@ def dim_cards():
 
 @dp.table(comment="Merchant-category dimension built from MCC codes.")
 def dim_merchant():
+    mcc  = spark.read.table(f"{catalog}.{silver}.silver_mcc_codes")
     # Distinct merchants observed in transactions, enriched with MCC description.
-    tx = dp.read(f"{catalog}.{silver}.silver_transactions").select(
-        "merchant_id", "merchant_city", "merchant_state", "mcc").dropDuplicates(["merchant_id"])
-    return tx.withColumn("mcc_description", F.col("mcc").cast("string"))
+    return (
+        dp.read(f"{catalog}.{silver}.silver_transactions")
+        .select("merchant_id", "merchant_city", "merchant_state", "mcc")
+        .join(F.broadcast(mcc), "mcc", "left")
+        .dropDuplicates(["merchant_id"])
+    )
 
 
 @dp.table(comment="Date dimension for time-series analysis.")
 def dim_date():
-    dates = (dp.read(f"{catalog}.{silver}.silver_transactions").select(F.col("transaction_date").alias("date"))
-             .union(dp.read(f"{catalog}.{silver}.silver_notifications").select(F.col("sent_date").alias("date")))
-             .where("date IS NOT NULL").distinct())
+    dates = (
+        dp.read(f"{catalog}.{silver}.silver_transactions")
+        .select(F.col("transaction_date").alias("date"))
+        .union(dp.read(f"{catalog}.{silver}.silver_notifications").select(F.col("sent_date").alias("date")))
+        .where("date IS NOT NULL").distinct()
+    )
     return (dates
         .withColumn("year", F.year("date"))
         .withColumn("month", F.month("date"))
@@ -76,7 +83,7 @@ def fact_transactions():
         .select(
             "transaction_id", "client_id", "card_id", "merchant_id",
             "transaction_ts", "transaction_date",
-            "amount_usd", "use_chip", "is_declined", "mcc",
+            "amount", "use_chip", "is_declined", "mcc",
         )
         .withColumn("is_fraud", F.lit(False))   # join train_fraud_labels here in a real build
     )
@@ -84,12 +91,18 @@ def fact_transactions():
 
 @dp.table(comment="Notification fact at grain = one row per notification.")
 def fact_notifications():
-    return dp.read(f"{catalog}.{silver}.silver_notifications").select(
-        "notification_id", "client_id", "channel", "category",
-        "sent_ts", "sent_date", "opened")
+    return (
+        dp.read(f"{catalog}.{silver}.silver_notifications")
+        .select(
+            "notification_id", "client_id", "channel", "category",
+            "sent_ts", "sent_date", "opened"
+        )
+    )
 
 
 @dp.table(comment="Device activity fact at grain = one row per session/event.")
 def fact_device_activity():
-    return dp.read(f"{catalog}.{silver}.silver_device_events").select(
-        "client_id", "device_id", "os", "event_type", "event_ts", "event_date")
+    return (
+        dp.read(f"{catalog}.{silver}.silver_device_events")
+        .select("client_id", "device_id", "os", "event_type", "event_ts", "event_date")
+    )
