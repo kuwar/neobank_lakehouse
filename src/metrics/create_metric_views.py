@@ -46,13 +46,13 @@ dimensions:
     expr: use_chip
 measures:
   - name: Total spend
-    expr: SUM(amount_usd)
+    expr: SUM(amount)
   - name: Transaction count
     expr: COUNT(1)
   - name: Active customers
     expr: COUNT(DISTINCT client_id)
   - name: Average transaction value
-    expr: SUM(amount_usd) / COUNT(1)
+    expr: SUM(amount) / COUNT(1)
   - name: Decline rate
     expr: SUM(CASE WHEN is_declined THEN 1 ELSE 0 END) / COUNT(1)
   - name: Fraud rate

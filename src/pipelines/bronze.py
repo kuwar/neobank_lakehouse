@@ -65,7 +65,7 @@ def bronze_cards():
 
 ##-------- MCC_codes---------------------
 @dp.materialized_view(
-    namme=_qualify("bronze_mcc_codes"),
+    name=_qualify("bronze_mcc_codes"),
     comment="Raw mcc lookup table"
 )
 def bronze_mcc_codes():    

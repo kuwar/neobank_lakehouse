@@ -78,7 +78,7 @@ def silver_cards():
 # ── Transactions ─────────────────────────────────────────────────────────────
 @dp.table(comment="Cleaned transactions with parsed amount and MCC join.")
 @dp.expect_or_drop("valid_txn", "transaction_id IS NOT NULL AND client_id IS NOT NULL")
-@dp.expect("nonzero_amount", "amount_usd <> 0")
+@dp.expect("nonzero_amount", "amount <> 0")
 def silver_transactions():
     tx = (
         dp.read(f"{catalog}.{bronze}.bronze_transactions")
@@ -121,10 +121,10 @@ def silver_transactions():
     name="silver_mcc_codes",
     comment="Merchant Category Codes: one row per code.",
 )
-@dp.expect_all_or_drop({"mcc_code_valid": "mcc_code RLIKE '^[0-9]{4}$'"})
+@dp.expect_all_or_drop({"mcc_code_valid": "mcc RLIKE '^[0-9]{4}$'"})
 def silver_mcc_codes():
     return (
-        dp.read("bronze_mcc_codes")
+        dp.read(f"{catalog}.{bronze}.bronze_mcc_codes")
         .select(F.from_json("value", T.MapType(T.StringType(), T.StringType())).alias("m"))
         .select(F.explode("m").alias("mcc", "mcc_description"))
         .withColumn("mcc", F.col("mcc").cast("integer"))
