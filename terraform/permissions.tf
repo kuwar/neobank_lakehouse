@@ -4,7 +4,7 @@ resource "databricks_grants" "neobank_schema" {
   schema = "${databricks_catalog.neobank.name}.${databricks_schema.bronze.name}"
 
   grant {
-    principal  = data.databricks_current_user.me.user_name
+    principal  = data.databricks_user.me.user_name
     privileges = ["USE_SCHEMA", "SELECT", "CREATE_TABLE"]
   }
 }
