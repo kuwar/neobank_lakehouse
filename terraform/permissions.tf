@@ -1,10 +1,22 @@
-# Authoritative grant set on the schema.
-# databricks_grants REPLACES all grants on the object with exactly what's listed.
-resource "databricks_grants" "neobank_schema" {
-  schema = "${databricks_catalog.neobank.name}.${databricks_schema.bronze.name}"
+resource "databricks_grants" "neobank_catalog" {
+  catalog = databricks_catalog.neobank.name
 
   grant {
-    principal  = data.databricks_user.me.user_name
-    privileges = ["USE_SCHEMA", "SELECT", "CREATE_TABLE"]
+    principal = databricks_group.data_engineers.display_name
+    privileges = ["USE_CATALOG", "USE_SCHEMA", "SELECT", "MODIFY",
+    "CREATE_TABLE", "READ_VOLUME", "WRITE_VOLUME"]
+  }
+  grant {
+    principal  = databricks_service_principal.metabase.display_name
+    privileges = ["USE_CATALOG"]
+  }
+}
+
+resource "databricks_grants" "neobank_schema" {
+  schema = "${databricks_catalog.neobank.name}.${databricks_schema.gold.name}"
+
+  grant {
+    principal  = databricks_service_principal.metabase.display_name
+    privileges = ["USE_SCHEMA", "SELECT"]
   }
 }
