@@ -24,8 +24,9 @@ CREATE OR REPLACE VIEW {catalog}.{gold}.mv_transactions
 WITH METRICS
 LANGUAGE YAML
 AS $$
-version: "0.1"
+version: "1.1"
 source: {catalog}.{gold}.fact_transactions
+comment: "Transactions: grains by users and merchants"
 joins:
   - name: user
     source: {catalog}.{gold}.dim_users
@@ -33,7 +34,7 @@ joins:
   - name: merchant
     source: {catalog}.{gold}.dim_merchant
     on: source.merchant_id = merchant.merchant_id
-dimensions:
+fields:
   - name: Transaction date
     expr: transaction_date
   - name: Merchant category
@@ -66,13 +67,13 @@ CREATE OR REPLACE VIEW {catalog}.{gold}.mv_engagement
 WITH METRICS
 LANGUAGE YAML
 AS $$
-version: "0.1"
+version: "1.1"
 source: {catalog}.{gold}.fact_notifications
 joins:
   - name: user
     source: {catalog}.{gold}.dim_users
     on: source.client_id = user.client_id
-dimensions:
+fields:
   - name: Sent date
     expr: sent_date
   - name: Channel
