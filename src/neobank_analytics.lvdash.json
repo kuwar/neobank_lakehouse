@@ -1,0 +1,600 @@
+{
+  "datasets": [
+    {
+      "asset_name": "neobank_dev.gold.mv_transactions",
+      "columns": [
+        {
+          "displayName": "Credit band sort order",
+          "expression": "CASE WHEN `Credit band` = 'poor' THEN 1 WHEN `Credit band` = 'fair' THEN 2 WHEN `Credit band` = 'good' THEN 3 WHEN `Credit band` = 'excellent' THEN 4 ELSE 5 END"
+        }
+      ],
+      "displayName": "mv_transactions",
+      "name": "dataset1"
+    }
+  ],
+  "pages": [
+    {
+      "displayName": "New Page",
+      "layout": [
+        {
+          "position": {
+            "height": 4,
+            "width": 6,
+            "x": 0,
+            "y": 5
+          },
+          "widget": {
+            "name": "bar_chart1",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dataset1",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`Credit band`",
+                      "name": "Credit band"
+                    },
+                    {
+                      "expression": "MEASURE(`Total spend`)",
+                      "name": "measure(Total spend)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "label": {
+                  "show": true
+                },
+                "x": {
+                  "fieldName": "Credit band",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(Total spend)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Total Spend by Credit Band"
+                }
+              },
+              "version": 3,
+              "widgetType": "bar"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 2,
+            "width": 12,
+            "x": 0,
+            "y": 0
+          },
+          "widget": {
+            "multilineTextboxSpec": {
+              "lines": [
+                "# <span style=\"text-align:center;display:block;\">Dashboard for transactions table</span>\n",
+                "\n",
+                "<span style=\"text-align:center;display:block;\">The dashboard to total spending by diffeent credit bands and income band</span>"
+              ]
+            },
+            "name": "text_box1"
+          }
+        },
+        {
+          "position": {
+            "height": 6,
+            "width": 12,
+            "x": 0,
+            "y": 22
+          },
+          "widget": {
+            "name": "table1",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dataset1",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`Transaction date`",
+                      "name": "Transaction date"
+                    },
+                    {
+                      "expression": "`Merchant category`",
+                      "name": "Merchant category"
+                    },
+                    {
+                      "expression": "`Income band`",
+                      "name": "Income band"
+                    },
+                    {
+                      "expression": "`Credit band`",
+                      "name": "Credit band"
+                    },
+                    {
+                      "expression": "`Entry mode`",
+                      "name": "Entry mode"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "displayRowNumbers": false,
+              "encodings": {
+                "columns": [
+                  {
+                    "actions": {
+                      "hover": {
+                        "tooltipTemplate": "{{ @ }}",
+                        "type": "tooltip"
+                      }
+                    },
+                    "contentAlignment": "right",
+                    "fieldName": "Transaction date",
+                    "format": {
+                      "format": "DD/MM/YYYY",
+                      "type": "moment.js"
+                    },
+                    "useForSearch": false
+                  },
+                  {
+                    "actions": {
+                      "hover": {
+                        "tooltipTemplate": "{{ @ }}",
+                        "type": "tooltip"
+                      }
+                    },
+                    "fieldName": "Merchant category",
+                    "useForSearch": false
+                  },
+                  {
+                    "actions": {
+                      "hover": {
+                        "tooltipTemplate": "{{ @ }}",
+                        "type": "tooltip"
+                      }
+                    },
+                    "fieldName": "Income band",
+                    "useForSearch": false
+                  },
+                  {
+                    "actions": {
+                      "hover": {
+                        "tooltipTemplate": "{{ @ }}",
+                        "type": "tooltip"
+                      }
+                    },
+                    "fieldName": "Credit band",
+                    "useForSearch": false
+                  },
+                  {
+                    "actions": {
+                      "hover": {
+                        "tooltipTemplate": "{{ @ }}",
+                        "type": "tooltip"
+                      }
+                    },
+                    "fieldName": "Entry mode",
+                    "useForSearch": false
+                  }
+                ]
+              },
+              "rowsPerPage": 25,
+              "version": 2,
+              "widgetType": "table"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 3,
+            "width": 4,
+            "x": 8,
+            "y": 2
+          },
+          "widget": {
+            "name": "29443828",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dataset1",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "MEASURE(`Decline rate`)",
+                      "name": "measure(Decline rate)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Decline rate)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Decline Rate"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 4,
+            "width": 6,
+            "x": 6,
+            "y": 5
+          },
+          "widget": {
+            "name": "71f57795",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dataset1",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`Income band`",
+                      "name": "Income band"
+                    },
+                    {
+                      "expression": "MEASURE(`Total spend`)",
+                      "name": "measure(Total spend)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "label": {
+                  "show": true
+                },
+                "x": {
+                  "fieldName": "Income band",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(Total spend)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Total Spend by Income Band"
+                }
+              },
+              "version": 3,
+              "widgetType": "bar"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 3,
+            "width": 4,
+            "x": 4,
+            "y": 2
+          },
+          "widget": {
+            "name": "91e9f661",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dataset1",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "MEASURE(`Transaction count`)",
+                      "name": "measure(Transaction count)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Transaction count)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Transaction count"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 3,
+            "width": 4,
+            "x": 0,
+            "y": 2
+          },
+          "widget": {
+            "name": "ac61cc9f",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dataset1",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "MEASURE(`Total spend`)",
+                      "name": "measure(Total spend)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Total spend)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Total Spend"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 6,
+            "width": 12,
+            "x": 0,
+            "y": 9
+          },
+          "widget": {
+            "name": "15dfaa59",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dataset1",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "DATE_TRUNC(\"MONTH\", `Transaction date`)",
+                      "name": "monthly(Transaction date)"
+                    },
+                    {
+                      "expression": "MEASURE(`Total spend`)",
+                      "name": "measure(Total spend)"
+                    },
+                    {
+                      "expression": "`Entry mode`",
+                      "name": "Entry mode"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "label": {
+                  "show": true
+                },
+                "x": {
+                  "fieldName": "monthly(Transaction date)",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(Total spend)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "facet": {
+                "fieldName": "Entry mode",
+                "scale": {
+                  "type": "categorical"
+                },
+                "type": "wrap"
+              },
+              "version": 3,
+              "widgetType": "line"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 7,
+            "width": 12,
+            "x": 0,
+            "y": 15
+          },
+          "widget": {
+            "name": "369964ca",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dataset1",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "MEASURE(`Transaction count`)",
+                      "name": "measure(Transaction count)"
+                    },
+                    {
+                      "expression": "`Merchant category`",
+                      "name": "Merchant category"
+                    },
+                    {
+                      "expression": "MEASURE(`Total spend`)",
+                      "name": "measure(Total spend)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "size": {
+                  "fieldName": "measure(Transaction count)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "x": {
+                  "fieldName": "Merchant category",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(Total spend)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Spend & Transactions by Category"
+              },
+              "version": 3,
+              "widgetType": "scatter"
+            }
+          }
+        }
+      ],
+      "layoutVersion": "GRID_V1",
+      "name": "page1",
+      "pageType": "PAGE_TYPE_CANVAS"
+    },
+    {
+      "displayName": "Global Filters",
+      "layout": [
+        {
+          "position": {
+            "height": 2,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          },
+          "widget": {
+            "name": "filter-by-date",
+            "queries": [
+              {
+                "name": "dashboards/01f1a24e9b6b1f7ab3adcd1782d9e729/datasets/01f1a24e9b6c120c9169d141b8ec02be_Transaction date",
+                "query": {
+                  "datasetName": "dataset1",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`Transaction date`",
+                      "name": "Transaction date"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "Transaction date_associativity"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "Transaction date",
+                    "queryName": "dashboards/01f1a24e9b6b1f7ab3adcd1782d9e729/datasets/01f1a24e9b6c120c9169d141b8ec02be_Transaction date"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Filter by date"
+                }
+              },
+              "version": 2,
+              "widgetType": "filter-date-range-picker"
+            }
+          }
+        }
+      ],
+      "layoutVersion": "GRID_V1",
+      "name": "03a332d1",
+      "pageType": "PAGE_TYPE_GLOBAL_FILTERS"
+    }
+  ],
+  "uiSettings": {
+    "applyModeEnabled": false,
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    }
+  }
+}

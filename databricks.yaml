@@ -16,6 +16,10 @@ artifacts:
 include:
   - resources/*.yaml
 
+sync:
+  exclude:
+    - src/*.lvdash.json
+
 # Reusable values. Override per target below or with --var "name=value".
 variables:
   catalog:
