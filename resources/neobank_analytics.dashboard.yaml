@@ -1,0 +1,8 @@
+resources:
+  dashboards:
+    neobank_analytics:
+      display_name: "NeoBank-Analytics"
+      dataset_catalog: ${var.catalog}
+      dataset_schema: ${var.gold_schema}
+      warehouse_id: dfc7731614511a53
+      file_path: ../src/neobank_analytics.lvdash.json
