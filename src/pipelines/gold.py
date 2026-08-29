@@ -34,6 +34,7 @@ spark.sql(f"USE SCHEMA {gold}")
 #    and it is what makes point-in-time correctness cheap.
 # *) bootstrap valid_from from acct_open_date (earliest card) and treat the current row as open-ended.
 @dp.table(comment="Customer dimension.")
+@dp.expect_or_fail("valid_client_id", "client_id IS NOT NULL")
 def dim_users():
     return (
         dp.read(f"{catalog}.{silver}.silver_users")
@@ -50,11 +51,14 @@ def dim_users():
 
 
 @dp.table(comment="Card dimension.")
+@dp.expect_or_fail("valid_card_id", "card_id IS NOT NULL")
+@dp.expect_or_fail("valid_client_id", "client_id IS NOT NULL")
 def dim_cards():
     return dp.read(f"{catalog}.{silver}.silver_cards")
 
 
 @dp.materialized_view(comment="Merchant-category dimension.")
+@dp.expect_or_fail("valid_merchant_id", "merchant_id IS NOT NULL")
 def dim_merchant():
     # Distinct merchants observed in transactions.
     return (
@@ -65,6 +69,7 @@ def dim_merchant():
     )
 
 @dp.materialized_view(comment="MCC codes dimensions")
+@dp.expect_or_fail("valid_mcc", "mcc IS NOT NULL")
 def dim_mcc_code():
     return spark.read.table(f"{catalog}.{silver}.silver_mcc_codes")
 
@@ -89,6 +94,13 @@ def dim_date():
     comment="Transaction fact at grain = one row per transaction.",
     table_properties={"delta.autoOptimize.optimizeWrite": "true"},
 )
+@dp.expect_all_or_fail({
+    "valid_transaction_id": "transaction_id IS NOT NULL",
+    "valid_client_id": "client_id IS NOT NULL",
+    "valid_card_id": "card_id IS NOT NULL",
+    "valid_merchant_id": "merchant_id IS NOT NULL",
+    "valid_mcc": "mcc IS NOT NULL"
+})
 def fact_transactions():
     return (
         dp.read(f"{catalog}.{silver}.silver_transactions")
@@ -102,6 +114,7 @@ def fact_transactions():
 
 
 @dp.table(comment="Notification fact at grain = one row per notification.")
+@dp.expect_or_fail("valid_client_id", "client_id IS NOT NULL")
 def fact_notifications():
     return (
         dp.read(f"{catalog}.{silver}.silver_notifications")
@@ -113,6 +126,7 @@ def fact_notifications():
 
 
 @dp.table(comment="Device activity fact at grain = one row per session/event.")
+@dp.expect_or_fail("valid_client_id", "client_id IS NOT NULL")
 def fact_device_activity():
     return (
         dp.read(f"{catalog}.{silver}.silver_device_events")
