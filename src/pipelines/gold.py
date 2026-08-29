@@ -3,9 +3,10 @@
 # GOLD — a query-able star schema. Conformed dimensions + additive fact tables
 # are exactly what BI tools and metric views expect: fast joins, clear grain.
 #
-#   dim_users ─┐                 ┌─ dim_merchant
+#   dim_users ─┐                 ┌─ dim_date
 #              ├─ fact_transactions
-#   dim_cards ─┘                 └─ dim_date
+#   dim_cards ─┘                 └─ dim_merchant
+#                                └─ dim_mcc_codes
 #   dim_users ─── fact_notifications
 #   dim_users ─── fact_device_activity
 # ─────────────────────────────────────────────────────────────────────────────
@@ -45,16 +46,19 @@ def dim_cards():
     return dp.read(f"{catalog}.{silver}.silver_cards")
 
 
-@dp.table(comment="Merchant-category dimension built from MCC codes.")
+@dp.materialized_view(comment="Merchant-category dimension.")
 def dim_merchant():
-    mcc  = spark.read.table(f"{catalog}.{silver}.silver_mcc_codes")
-    # Distinct merchants observed in transactions, enriched with MCC description.
+    # Distinct merchants observed in transactions.
     return (
         dp.read(f"{catalog}.{silver}.silver_transactions")
-        .select("merchant_id", "merchant_city", "merchant_state", "mcc")
-        .join(F.broadcast(mcc), "mcc", "left")
-        .dropDuplicates(["merchant_id"])
+        .select("merchant_id", "merchant_city", "merchant_state")
+        # A merchant can appear under several city (large retailers, franchises, aggregators)
+        .dropDuplicates(["merchant_id", "merchant_city"])
     )
+
+@dp.materialized_view(comment="MCC codes dimensions")
+def dim_mcc_code():
+    return spark.read.table(f"{catalog}.{silver}.silver_mcc_codes")
 
 
 @dp.table(comment="Date dimension for time-series analysis.")
@@ -81,9 +85,9 @@ def fact_transactions():
     return (
         dp.read(f"{catalog}.{silver}.silver_transactions")
         .select(
-            "transaction_id", "client_id", "card_id", "merchant_id",
+            "transaction_id", "client_id", "card_id", "merchant_id", "mcc",
             "transaction_ts", "transaction_date",
-            "amount", "use_chip", "is_declined", "mcc",
+            "amount", "use_chip", "is_declined", 
         )
         .withColumn("is_fraud", F.lit(False))   # join train_fraud_labels here in a real build
     )
