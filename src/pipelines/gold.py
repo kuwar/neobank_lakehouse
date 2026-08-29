@@ -25,6 +25,14 @@ spark.sql(f"USE CATALOG {catalog}")
 spark.sql(f"USE SCHEMA {gold}") 
 
 # ── Dimensions ───────────────────────────────────────────────────────────────
+# TODO - users must be SCD Type - 2
+# credit_score, yearly_income, total_debt, num_credit_cards, current_age and both derived bands all change over time.
+# Recommendation changes:
+# *) dim_users_scd2 — client_id, valid_from, valid_to, is_current, hash diff. Join facts on client_id AND 
+#    transaction_date BETWEEN valid_from AND valid_to for as-of-transaction attributes.
+# *) snap_customer_monthly — one row per client_id × month_end. This is what the ML feature pipeline reads, 
+#    and it is what makes point-in-time correctness cheap.
+# *) bootstrap valid_from from acct_open_date (earliest card) and treat the current row as open-ended.
 @dp.table(comment="Customer dimension.")
 def dim_users():
     return (

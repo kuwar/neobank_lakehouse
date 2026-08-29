@@ -52,6 +52,7 @@ def bronze_transactions():
     return _ingest(f"{root}/transactions", "csv", header="true")
 
 
+# TODO - user must be treated as SCD Type - 2
 @dp.table(name=_qualify("bronze_users"),
           comment="Raw users/customers.")
 def bronze_users():
