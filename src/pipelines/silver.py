@@ -59,7 +59,8 @@ def silver_cards():
             F.col("card_type"),
             F.col("card_number"),
             F.col("expires"),
-            F.col("cvv"),
+            # cvv has no analytical use whatsoever. Drop it
+            # F.col("cvv"),
             F.col("has_chip"),
             F.col("num_cards_issued"),
             F.regexp_replace("credit_limit", r"[$,]", "").cast("double").alias("credit_limit"),
