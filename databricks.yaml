@@ -21,7 +21,10 @@ sync:
     - src/*.lvdash.json
 
 # Reusable values. Override per target below or with --var "name=value".
-variables:
+variables: 
+  warehouse_id:
+    description: Warehouse must exist before
+    default: dfc7731614511a53
   catalog:
     description: Unity Catalog catalog for all objects
     default: neobank

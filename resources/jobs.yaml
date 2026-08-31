@@ -50,6 +50,16 @@ resources:
               - "${var.catalog}"
               - "--gold-schema"
               - "${var.gold_schema}"
+        
+        # 4) Create/Refresh UC object (function)
+        - task_key: udf
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            parameters:
+              catalog: "${var.catalog}"
+              gold_schema: "${var.gold_schema}"
+            file:
+              path: ../src/udf/uc_columns_functions.sql
 
       # Serverless wheel install — this DOES work for spark_python_task
       environments:
