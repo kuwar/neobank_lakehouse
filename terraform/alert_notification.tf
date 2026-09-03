@@ -1,8 +1,8 @@
-resource "databricks_notification_destination" "email_shaurave" {
-  display_name = "email_shaurave"
+resource "databricks_notification_destination" "neobank_email_notification" {
+  display_name = "neobank_email_notification"
   config {
     email {
-      addresses = ["kuwarsaurav21@gmail.com"]
+      addresses = var.email_notification_addresses
     }
   }
 }
