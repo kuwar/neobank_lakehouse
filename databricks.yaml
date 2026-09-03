@@ -41,6 +41,12 @@ variables:
   sample_rows:
     description: Max transactions to load (0 = all ~13M)
     default: "500000"
+  slack_destination_id:
+    description: Neobank slack notification
+    default: '<ID>'
+  oncall_email:
+    description: Neobank email notification
+    default: '<ID>'
 
 targets:
   # Personal sandbox — names prefixed [dev you], schedules paused. Safe + cheap.

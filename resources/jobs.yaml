@@ -4,6 +4,16 @@ resources:
   jobs:
     neobank_daily:
       name: neobank_daily
+      email_notifications:
+        on_failure:
+          - "${var.oncall_email}"
+      webhook_notifications:
+        on_failure:
+          - id: "${var.slack_destination_id}"
+        on_success:
+          - id: "${var.slack_destination_id}"
+      notification_settings:
+        no_alert_for_skipped_runs: true
       tags:
         project: neobank
         layer: orchestration
