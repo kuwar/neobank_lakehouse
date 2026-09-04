@@ -21,6 +21,11 @@ resources:
         neobank.gold_schema: ${var.gold_schema}
         neobank.volume: ${var.volume}
 
+      event_log:
+        catalog: ${var.catalog}
+        schema: ${var.silver_schema}
+        name: neobank_pipeline_event_logs_${bundle.target}
+
       libraries:
         - notebook:
             path: ../src/pipelines/bronze.py
