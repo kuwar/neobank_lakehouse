@@ -34,6 +34,8 @@ variables:
     default: silver
   gold_schema:
     default: gold
+  metrics_view_schema:
+    default: metrics_view
   volume:
     description: Volume that holds landed raw files
     default: raw

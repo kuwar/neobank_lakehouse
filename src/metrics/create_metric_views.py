@@ -10,29 +10,29 @@ from neobank_datalake.db_context import get_spark
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--catalog", required=True)
-parser.add_argument("--gold-schema")
+parser.add_argument("--metrics-view-schema")
 args = parser.parse_args()
 
 spark = get_spark()
 
 catalog = args.catalog
-gold = args.gold_schema
+metrics_view = args.metrics_view_schema
 
 # Metric view 1 — Transactions & spend.
 spark.sql(f"""
-CREATE OR REPLACE VIEW {catalog}.{gold}.mv_transactions
+CREATE OR REPLACE VIEW {catalog}.{metrics_view}.mv_transactions
 WITH METRICS
 LANGUAGE YAML
 AS $$
 version: "1.1"
-source: {catalog}.{gold}.fact_transactions
+source: {catalog}.{metrics_view}.fact_transactions
 comment: "Transactions: grains by users and merchants"
 joins:
   - name: user
-    source: {catalog}.{gold}.dim_users
+    source: {catalog}.{metrics_view}.dim_users
     on: source.client_id = user.client_id
   - name: merchant
-    source: {catalog}.{gold}.dim_merchant
+    source: {catalog}.{metrics_view}.dim_merchant
     on: source.merchant_id = merchant.merchant_id
 fields:
   - name: Transaction date
@@ -63,15 +63,15 @@ $$
 
 # Metric view 2 — Customer engagement (notifications + device activity).
 spark.sql(f"""
-CREATE OR REPLACE VIEW {catalog}.{gold}.mv_engagement
+CREATE OR REPLACE VIEW {catalog}.{metrics_view}.mv_engagement
 WITH METRICS
 LANGUAGE YAML
 AS $$
 version: "1.1"
-source: {catalog}.{gold}.fact_notifications
+source: {catalog}.{metrics_view}.fact_notifications
 joins:
   - name: user
-    source: {catalog}.{gold}.dim_users
+    source: {catalog}.{metrics_view}.dim_users
     on: source.client_id = user.client_id
 fields:
   - name: Sent date
@@ -97,7 +97,7 @@ $$
 # spark.sql(f"""
 #   SELECT `Merchant category`, MEASURE(`Total spend`) AS spend,
 #          MEASURE(`Active customers`) AS customers
-#   FROM {catalog}.{gold}.mv_transactions
+#   FROM {catalog}.{metrics_view}.mv_transactions
 #   GROUP BY `Merchant category`
 #   ORDER BY spend DESC
 #   LIMIT 10
@@ -107,7 +107,7 @@ $$
 # spark.sql(f"""
 #   SELECT `Channel`, MEASURE(`Open rate`) AS open_rate,
 #          MEASURE(`Notifications sent`) AS sent
-#   FROM {catalog}.{gold}.mv_engagement
+#   FROM {catalog}.{metrics_view}.mv_engagement
 #   GROUP BY `Channel`
 #   ORDER BY sent DESC
 # """).show(truncate=False)

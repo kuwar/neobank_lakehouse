@@ -20,6 +20,11 @@ resource "databricks_schema" "gold" {
   name         = "gold"
   comment      = "Business ready data"
 }
+resource "databricks_schema" "metrics_view" {
+  catalog_name = databricks_catalog.neobank.name
+  name         = "metrics_view"
+  comment      = "Business ready data to query using BI tools - eg. Metabase"
+}
 
 # A managed volume for files (CSVs, models, etc.)
 resource "databricks_volume" "raw" {
