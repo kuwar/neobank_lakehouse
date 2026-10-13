@@ -2,7 +2,7 @@ resource "databricks_grants" "neobank_catalog" {
   catalog = databricks_catalog.neobank.name
 
   grant {
-    principal = databricks_group.data_engineers.display_name
+    principal = data.databricks_group.data_engineers.display_name
     privileges = ["USE_CATALOG", "USE_SCHEMA", "SELECT", "MODIFY",
     "CREATE_TABLE", "READ_VOLUME", "WRITE_VOLUME"]
   }
@@ -12,7 +12,7 @@ resource "databricks_grants" "neobank_catalog" {
   }
 
   grant {
-    principal = databricks_group.ci_cd.display_name
+    principal  = databricks_group.ci_cd.display_name
     privileges = ["USE_CATALOG", "CREATE_SCHEMA", "USE_SCHEMA"]
   }
 }

@@ -1,44 +1,18 @@
-# A group that will act as our "Data Engineers role"
-resource "databricks_group" "data_engineers" {
-  display_name = "data_engineers"
-
-  # Entitlements = the coarse "capabilities" half of a role
-  databricks_sql_access = true
-  workspace_access      = true
-}
 
 # Put Shaurave in the group
-resource "databricks_group_member" "shaurave_eng" {
-  group_id  = databricks_group.data_engineers.id
-  member_id = data.databricks_user.me.id
-}
+# resource "databricks_group_member" "shaurave_eng" {
+#   group_id  = data.databricks_group.data_engineers.id
+#   member_id = data.databricks_user.me.id
+# }
 
-# pci reader
-resource "databricks_group" "pci_readers" {
-  display_name = "pci_readers"
+# # Put Shaurave in the group
+# resource "databricks_group_member" "shaurave_pci_reader" {
+#   group_id  = data.databricks_group.pci_readers.id
+#   member_id = data.databricks_user.me.id
+# }
 
-  # Entitlements = the coarse "capabilities" half of a role
-  databricks_sql_access = true
-  workspace_access      = true
-}
-
-# Put Shaurave in the group
-resource "databricks_group_member" "shaurave_pci_reader" {
-  group_id  = databricks_group.pci_readers.id
-  member_id = data.databricks_user.me.id
-}
-
-# pci reader
-resource "databricks_group" "global_analysts" {
-  display_name = "global_analysts"
-
-  # Entitlements = the coarse "capabilities" half of a role
-  databricks_sql_access = true
-  workspace_access      = true
-}
-
-# Put Shaurave in the group
-resource "databricks_group_member" "shaurave_global_analysts" {
-  group_id  = databricks_group.global_analysts.id
-  member_id = data.databricks_user.me.id
-}
+# # Put Shaurave in the group
+# resource "databricks_group_member" "shaurave_global_analysts" {
+#   group_id  = data.databricks_group.global_analysts.id
+#   member_id = data.databricks_user.me.id
+# }

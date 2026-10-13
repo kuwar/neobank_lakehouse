@@ -2,6 +2,11 @@
 resource "databricks_catalog" "neobank" {
   name    = "neobank"
   comment = "Neobank prod catalog"
+
+  lifecycle {
+      ignore_changes  = [storage_root]  # set by Default Storage, not by us
+      prevent_destroy = true            # never let a plan delete this catalog
+    }
 }
 
 # A schema inside that catalog

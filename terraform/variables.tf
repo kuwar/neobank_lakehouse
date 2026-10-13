@@ -7,6 +7,16 @@ variable "databricks_token" {
   sensitive = true
 }
 
+variable "workspace_id" {
+  type      = string
+  sensitive = true
+}
+
+variable "metastore_id" {
+  type      = string
+  sensitive = true
+}
+
 variable "warehouse_id" {
   type      = string
   sensitive = true
