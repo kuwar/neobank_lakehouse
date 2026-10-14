@@ -1,3 +1,11 @@
+#Error: cannot create group member: invalidSyntax Members attribute cannot be 
+# updated as group data-engineers can only be managed in account.
+
+# NOTE:
+# pci-readers and global-analysts are account-level groups. Free Edition has no
+# account console or account API, so Terraform can't manage their membership.
+# Add members by hand: Settings → Identity and access → Groups.
+
 
 # Put Shaurave in the group
 # resource "databricks_group_member" "shaurave_eng" {
