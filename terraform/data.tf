@@ -19,3 +19,11 @@ data "databricks_group" "data_engineers" {
 data "databricks_group" "global_analysts" {
   display_name = "global-analysts"
 }
+
+data "databricks_group" "cicd" {
+  display_name = "ci-cd"
+}
+
+data "databricks_service_principal" "sp_metabase" {
+  display_name = "sp-metabase-reader"
+}

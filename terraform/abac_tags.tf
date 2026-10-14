@@ -25,6 +25,8 @@ resource "databricks_tag_policy" "pci" {
 }
 
 resource "databricks_entity_tag_assignment" "card_number_pci" {
+  count = var.enable_abac_policies ? 1 : 0
+
   entity_type = "columns"
   entity_name = "${databricks_catalog.neobank.name}.${databricks_schema.gold.name}.dim_cards.card_number"
   tag_key     = "pci"
@@ -33,6 +35,8 @@ resource "databricks_entity_tag_assignment" "card_number_pci" {
 }
 
 resource "databricks_entity_tag_assignment" "address_pii" {
+  count = var.enable_abac_policies ? 1 : 0
+
   entity_type = "columns"
   entity_name = "${databricks_catalog.neobank.name}.${databricks_schema.gold.name}.dim_users.address"
   tag_key     = "pii"
@@ -55,6 +59,8 @@ resource "databricks_tag_policy" "region_sensitive" {
 }
 
 resource "databricks_entity_tag_assignment" "merchant_state_region_sensitive" {
+  count = var.enable_abac_policies ? 1 : 0
+
   entity_type = "columns"
   entity_name = "${databricks_catalog.neobank.name}.${databricks_schema.gold.name}.dim_merchant.merchant_state"
   tag_key     = "region_sensitive"

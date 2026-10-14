@@ -275,6 +275,43 @@ databricks bundle destroy -t dev
 In `dev` mode, every resource is prefixed `[dev <you>]` and schedules are paused, so
 you can iterate freely without touching anything shared.
 
+### Deploy order: Terraform + bundle
+
+Infrastructure and governance (catalog, schemas, grants, governed tags, column tag
+assignments, ABAC policies) are managed by Terraform in `terraform/`. Pipelines,
+jobs, the gold tables and the mask/row-filter UDFs are managed by the bundle.
+Unity Catalog rejects a policy whose function doesn't exist yet and a column tag on
+a table that doesn't exist yet. So on a fresh workspace, deploy in this order:
+
+```bash
+# 1. Base infrastructure: catalog, schemas, grants, tag definitions
+#    (column tag assignments and ABAC policies are skipped)
+cd terraform && terraform apply
+
+# 2. Deploy the bundle, create the UDFs, and build the gold tables
+cd .. && databricks bundle deploy -t dev
+databricks bundle run neobank_security_functions -t dev
+databricks bundle run neobank_daily -t dev          # uses compute
+
+# 3. Column tag assignments + ABAC policies, which can now find their tables and UDFs
+cd terraform && terraform apply -var enable_abac_policies=true
+```
+
+See [`docs/ABAC_TAGS_POLICIES.md` §5](docs/ABAC_TAGS_POLICIES.md) for why the
+dependency chain looks like this.
+
+After the first rollout, set `enable_abac_policies = true` in
+`terraform/terraform.tfvars` so plain `terraform apply` keeps the policies in place.
+
+Rerun `neobank_security_functions` whenever you change a file in `src/udf/`. The
+UDFs use `CREATE OR REPLACE`, so reruns are safe. Never drop or rename a UDF while
+a policy still references it: remove the policy in Terraform first, then the
+function.
+
+> **Free Edition:** `pci-readers`, `pii-readers` and `global-analysts` are
+> account-level groups, so Terraform can't manage who is in them. Add members by
+> hand under Settings → Identity and access → Groups.
+
 ---
 
 ## How a run flows end to end

@@ -1,4 +1,6 @@
 resource "databricks_policy_info" "mask_pci_columns" {
+  count = var.enable_abac_policies ? 1 : 0
+
   name                  = "mask_pci_columns"
   on_securable_type     = "SCHEMA"
   on_securable_fullname = "${databricks_catalog.neobank.name}.${databricks_schema.gold.name}"
@@ -28,6 +30,8 @@ resource "databricks_policy_info" "mask_pci_columns" {
 
 
 resource "databricks_policy_info" "mask_pii_address_columns" {
+  count = var.enable_abac_policies ? 1 : 0
+
   name                  = "mask_pii_address_columns"
   on_securable_type     = "SCHEMA"
   on_securable_fullname = "${databricks_catalog.neobank.name}.${databricks_schema.gold.name}"
@@ -57,6 +61,8 @@ resource "databricks_policy_info" "mask_pii_address_columns" {
 
 
 resource "databricks_policy_info" "row_filter_region_sensitive" {
+  count = var.enable_abac_policies ? 1 : 0
+
   name                  = "row_filter_region_sensitive"
   on_securable_type     = "SCHEMA"
   on_securable_fullname = "${databricks_catalog.neobank.name}.${databricks_schema.gold.name}"

@@ -32,3 +32,8 @@ variable "email_notification_addresses" {
   description = "List of email addresses for the notification destination"
   default     = []
 }
+variable "enable_abac_policies" {
+  description = "Create ABAC column tag assignments and policies. Turn on only after the bundle has created the mask/filter UDFs and the gold tables (see README deploy order)."
+  type        = bool
+  default     = false
+}
