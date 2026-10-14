@@ -1,7 +1,7 @@
 # A catalog: the top of the Unity Catalog hierarchy (catalog → schema → table/volume)
 resource "databricks_catalog" "neobank" {
-  name    = "neobank"
-  comment = "Neobank prod catalog"
+  name    = var.catalog
+  comment = "Neobank ${var.env} catalog"
 
   lifecycle {
     ignore_changes  = [storage_root] # set by Default Storage, not by us

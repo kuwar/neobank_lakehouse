@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Neobank Lakehouse — Databricks Asset Bundle
+# Neobank Lakehouse — Databricks Declarative Automation Bundle
 # A scalable medallion pipeline (bronze → silver → gold) over neobank data,
 # topped with a Unity Catalog metric-view semantic layer.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -26,8 +26,10 @@ variables:
     description: Warehouse must exist before
     default: dfc7731614511a53
   catalog:
+    # Normally set by BUNDLE_VAR_catalog from .envrc (neobank_${TARGET_ENV}), shared with Terraform.
+    # The per-target values below are the fallback when direnv isn't loaded (e.g. CI).
     description: Unity Catalog catalog for all objects
-    default: neobank
+    default: neobank_dev
   bronze_schema:
     default: bronze
   silver_schema:
@@ -43,12 +45,16 @@ variables:
   sample_rows:
     description: Max transactions to load (0 = all ~13M)
     default: "500000"
+  # Notification destinations are created by Terraform (terraform/alert_notification.tf);
+  # the bundle resolves their UUIDs by display name at deploy time.
   slack_destination_id:
     description: Neobank slack notification - managed using terraform
-    default: '<ID>'
+    lookup:
+      notification_destination: slack_neobank
   email_destination_id:
     description: Neobank email notification - managed using terraform
-    default: '<ID>'
+    lookup:
+      notification_destination: neobank_email_notification
   oncall_email:
     description: Urgent job failed notify to
     default: 'kuwarsaurav21@gmail.com'

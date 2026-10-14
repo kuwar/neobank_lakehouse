@@ -37,3 +37,17 @@ variable "enable_abac_policies" {
   type        = bool
   default     = false
 }
+
+variable "env" {
+  description = "Target environment (dev | prod). Set via TARGET_ENV in .env → TF_VAR_env (.envrc)."
+  type        = string
+  validation {
+    condition     = contains(["dev", "prod"], var.env)
+    error_message = "env must be dev or prod."
+  }
+}
+
+variable "catalog" {
+  description = "Unity Catalog catalog for this environment (neobank_<env>). Set via .envrc → TF_VAR_catalog; shared with the bundle's $${var.catalog}."
+  type        = string
+}

@@ -280,6 +280,21 @@ you can iterate freely without touching anything shared.
 Infrastructure and governance (catalog, schemas, grants, governed tags, column tag
 assignments, ABAC policies) are managed by Terraform in `terraform/`. Pipelines,
 jobs, the gold tables and the mask/row-filter UDFs are managed by the bundle.
+
+**Choosing the environment.** Both tools read the target from `.env` via
+[direnv](https://direnv.net/). Set `TARGET_ENV=dev` (or `prod`) in `.env`; `.envrc`
+derives everything else from it:
+
+| Variable | Value | Read by |
+|---|---|---|
+| `DATABRICKS_BUNDLE_TARGET` | `$TARGET_ENV` | bundle (replaces `-t`) |
+| `BUNDLE_VAR_catalog` | `neobank_$TARGET_ENV` | bundle `${var.catalog}` |
+| `TF_VAR_env` | `$TARGET_ENV` | Terraform `var.env` |
+| `TF_VAR_catalog` | `neobank_$TARGET_ENV` | Terraform `var.catalog` |
+
+Run `direnv allow` once, and again after editing `.envrc`. Terraform still keeps a
+single state, so it manages one environment at a time.
+
 Unity Catalog rejects a policy whose function doesn't exist yet and a column tag on
 a table that doesn't exist yet. So on a fresh workspace, deploy in this order:
 
@@ -289,9 +304,9 @@ a table that doesn't exist yet. So on a fresh workspace, deploy in this order:
 cd terraform && terraform apply
 
 # 2. Deploy the bundle, create the UDFs, and build the gold tables
-cd .. && databricks bundle deploy -t dev
-databricks bundle run neobank_security_functions -t dev
-databricks bundle run neobank_daily -t dev          # uses compute
+cd .. && databricks bundle deploy
+databricks bundle run neobank_security_functions
+databricks bundle run neobank_daily                 # uses compute
 
 # 3. Column tag assignments + ABAC policies, which can now find their tables and UDFs
 cd terraform && terraform apply -var enable_abac_policies=true
