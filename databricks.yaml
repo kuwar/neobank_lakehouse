@@ -55,6 +55,9 @@ variables:
     description: Neobank email notification - managed using terraform
     lookup:
       notification_destination: neobank_email_notification
+  cicd_sp_application_id:
+    description: Application ID of the GitHub CI/CD SP (set per target via lookup)
+    default: ""
   oncall_email:
     description: Urgent job failed notify to
     default: 'kuwarsaurav21@gmail.com'
@@ -73,10 +76,20 @@ targets:
     mode: production
     workspace:
       host: https://dbc-31fcc0ce-44e6.cloud.databricks.com
-      # We explicitly deploy to /Workspace/Users/kuwarsaurav21@gmail.com to make sure we only have a single copy.
-      root_path: /Workspace/Users/kuwarsaurav21@gmail.com/.bundle/${bundle.name}/${bundle.target}
+      # One copy in the SP's home, whoever deploys (GitHub SP or you as admin).
+      # Not /Workspace/Shared: that is writable by every workspace user.
+      root_path: /Workspace/Users/${var.cicd_sp_application_id}/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: neobank_prod
+      # GitHub CI/CD SP, created by Terraform (terraform/sp_dabs.tf); resolved to its application ID.
+      cicd_sp_application_id:
+        lookup:
+          service_principal: sp-github-cicd
+    # Prod jobs and pipelines run as the SP, not as whoever deployed.
+    run_as:
+      service_principal_name: ${var.cicd_sp_application_id}
     permissions:
       - user_name: kuwarsaurav21@gmail.com
+        level: CAN_MANAGE
+      - service_principal_name: ${var.cicd_sp_application_id}
         level: CAN_MANAGE

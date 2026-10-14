@@ -1,13 +1,5 @@
-# resource "databricks_service_principal" "sp_metabase" {
-#   display_name = "sp-metabase-reader"
-
-#   # entitlements
-#   # databricks_sql_access = true
-#   # workspace_access      = true
-#   # allow_cluster_create  = false
-# }
-
-# USE_CATALOG on neobank lives in permissions.tf (databricks_grants.neobank_catalog).
+# Metabase reads through sp-metabase-reader (created by hand; looked up in data.tf).
+# USE_CATALOG on the catalog lives in permissions.tf (databricks_grants.neobank_catalog).
 # databricks_grants is authoritative per securable, so only one resource may manage the catalog.
 
 resource "databricks_grants" "metrics_view" {
@@ -18,10 +10,16 @@ resource "databricks_grants" "metrics_view" {
   }
 }
 
+# databricks_permissions is authoritative per object: every principal that needs
+# the warehouse goes in this one resource, not a second one.
 resource "databricks_permissions" "sql_warehouse_metabase" {
   sql_endpoint_id = var.warehouse_id
   access_control {
     service_principal_name = data.databricks_service_principal.sp_metabase.application_id
+    permission_level       = "CAN_USE"
+  }
+  access_control {
+    service_principal_name = databricks_service_principal.sp_cicd.application_id
     permission_level       = "CAN_USE"
   }
 }
@@ -32,9 +30,9 @@ resource "databricks_service_principal_secret" "sp_metabase_secret" {
 
 # What you plug into Metabase
 
-# Server hostname: workspace URL (<workspace-id>.gcp.databricks.com)
+# Server hostname: workspace host (dbc-31fcc0ce-44e6.cloud.databricks.com)
 # HTTP path: the SQL warehouse's HTTP path (/sql/1.0/warehouses/<warehouse-id>)
 # Auth method: toggle to OAuth M2M
 # Client ID: sp_metabase_client_id output
-# Client secret: sp_metabase_secret output
-# Default catalog: neobank
+# Client secret: sp_metabase_client_secret output
+# Default catalog: neobank_<env> (var.catalog)

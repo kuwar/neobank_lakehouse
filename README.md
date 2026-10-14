@@ -419,6 +419,12 @@ Defined in `databricks.yml`. Override per target, or ad hoc with `--var "name=va
   to the volume via the UI once, then re-run.
 - Free Edition is free forever; the only limit is a daily compute quota that pauses
   compute (never deletes data) if exceeded.
+- **Group membership is manual.** `data-engineers`, `pci-readers`, `pii-readers`
+  and `global-analysts` are account-level groups, and Free Edition has no account
+  console or account API, so Terraform can't add members (`databricks_group_member`
+  fails with "can only be managed in account"). Add members under Settings →
+  Identity and access → Groups. Service principals are different: Terraform can
+  create them from the workspace (see `terraform/sp_dabs.tf`).
 
 ---
 

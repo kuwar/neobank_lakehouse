@@ -1,69 +1,50 @@
-resource "databricks_tag_policy" "pii" {
-  tag_key     = "pii"
-  description = "Indicates column contains personal data"
+locals {
+  # Governed tags: tag key → description. Each allows the values "true" / "false".
+  governed_tags = {
+    pii              = "Indicates column contains personal data"
+    pci              = "Indicates column contains cardholder data"
+    region_sensitive = "Indicates column contains region sensitive data" # drives the row-level filter
+  }
+
+  # Column tag assignments in the gold schema: "<table>.<column>" → tag key (value "true").
+  gold_column_tags = {
+    "dim_cards.card_number"       = "pci"
+    "dim_users.address"           = "pii"
+    "dim_merchant.merchant_state" = "region_sensitive"
+  }
+}
+
+resource "databricks_tag_policy" "governed" {
+  for_each = local.governed_tags
+
+  tag_key     = each.key
+  description = each.value
   values = [
-    {
-      name = "true"
-    },
-    {
-      name = "false"
-    }
+    { name = "true" },
+    { name = "false" },
   ]
 }
 
-resource "databricks_tag_policy" "pci" {
-  tag_key     = "pci"
-  description = "Indicates column contains cardholder data"
-  values = [
-    {
-      name = "true"
-    },
-    {
-      name = "false"
-    }
-  ]
-}
-
-resource "databricks_entity_tag_assignment" "card_number_pci" {
-  count = var.enable_abac_policies ? 1 : 0
+# Needs the gold tables to exist, so it is gated with the ABAC policies (see README deploy order).
+resource "databricks_entity_tag_assignment" "gold_column" {
+  for_each = var.enable_abac_policies ? local.gold_column_tags : {}
 
   entity_type = "columns"
-  entity_name = "${databricks_catalog.neobank.name}.${databricks_schema.gold.name}.dim_cards.card_number"
-  tag_key     = "pci"
+  entity_name = "${databricks_catalog.neobank.name}.${databricks_schema.gold.name}.${each.key}"
+  tag_key     = databricks_tag_policy.governed[each.value].tag_key
   tag_value   = "true"
-  depends_on  = [databricks_tag_policy.pci]
 }
 
-resource "databricks_entity_tag_assignment" "address_pii" {
-  count = var.enable_abac_policies ? 1 : 0
-
-  entity_type = "columns"
-  entity_name = "${databricks_catalog.neobank.name}.${databricks_schema.gold.name}.dim_users.address"
-  tag_key     = "pii"
-  tag_value   = "true"
-  depends_on  = [databricks_tag_policy.pii]
+# The tag policies were individual resources before; keep them instead of recreating.
+moved {
+  from = databricks_tag_policy.pii
+  to   = databricks_tag_policy.governed["pii"]
 }
-
-# Region sensitive -- row-level-filter
-resource "databricks_tag_policy" "region_sensitive" {
-  tag_key     = "region_sensitive"
-  description = "Indicates column contains region sensitive data"
-  values = [
-    {
-      name = "true"
-    },
-    {
-      name = "false"
-    }
-  ]
+moved {
+  from = databricks_tag_policy.pci
+  to   = databricks_tag_policy.governed["pci"]
 }
-
-resource "databricks_entity_tag_assignment" "merchant_state_region_sensitive" {
-  count = var.enable_abac_policies ? 1 : 0
-
-  entity_type = "columns"
-  entity_name = "${databricks_catalog.neobank.name}.${databricks_schema.gold.name}.dim_merchant.merchant_state"
-  tag_key     = "region_sensitive"
-  tag_value   = "true"
-  depends_on  = [databricks_tag_policy.region_sensitive]
+moved {
+  from = databricks_tag_policy.region_sensitive
+  to   = databricks_tag_policy.governed["region_sensitive"]
 }
