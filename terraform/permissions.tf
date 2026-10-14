@@ -7,7 +7,7 @@ resource "databricks_grants" "neobank_catalog" {
     "CREATE_TABLE", "READ_VOLUME", "WRITE_VOLUME"]
   }
   grant {
-    principal  = data.databricks_service_principal.sp_metabase.display_name
+    principal  = data.databricks_service_principal.sp_metabase.application_id
     privileges = ["USE_CATALOG"]
   }
 
@@ -21,7 +21,7 @@ resource "databricks_grants" "neobank_schema" {
   schema = "${databricks_catalog.neobank.name}.${databricks_schema.gold.name}"
 
   grant {
-    principal  = data.databricks_service_principal.sp_metabase.display_name
+    principal  = data.databricks_service_principal.sp_metabase.application_id
     privileges = ["USE_SCHEMA", "SELECT"]
   }
 }
