@@ -299,7 +299,12 @@ Unity Catalog rejects a policy whose function doesn't exist yet and a column tag
 a table that doesn't exist yet. So on a fresh workspace, deploy in this order:
 
 ```bash
-# 1. Base infrastructure: catalog, schemas, grants, tag definitions
+# 0. Once per environment: create the catalog with SQL (Free Edition's Default
+#    Storage only works through SQL/UI, not the catalog API), then adopt it
+#    CREATE CATALOG IF NOT EXISTS neobank_dev;       -- in the SQL editor
+terraform -chdir=terraform import databricks_catalog.neobank "$CATALOG"
+
+# 1. Base infrastructure: schemas, volume, grants, tag definitions
 #    (column tag assignments and ABAC policies are skipped)
 cd terraform && terraform apply
 
