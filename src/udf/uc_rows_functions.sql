@@ -1,10 +1,11 @@
 -- -----------------------------------------------------------------------------
 -- Row filter: regional analysts see only their region
+-- global-analysts are exempt via the ABAC policy (except_principals), so they
+-- never reach this function.
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION IDENTIFIER(:catalog || '.' || :gold_schema || '.filter_by_region')(merchant_state STRING)
 RETURN (
-    is_account_group_member('global_analysts')
-    OR merchant_state IN (
+    merchant_state IN (
         SELECT 
             merchant_state 
         FROM IDENTIFIER(:catalog || '.' || :gold_schema || '.dim_merchant')

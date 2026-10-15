@@ -14,7 +14,7 @@ variable "email_notification_addresses" {
   default     = []
 }
 variable "enable_abac_policies" {
-  description = "Create ABAC column tag assignments and policies. Turn on only after the bundle has created the mask/filter UDFs and the gold tables (see README deploy order)."
+  description = "Create the ABAC policies. Turn on only after the bundle has created the mask/filter UDFs (job neobank_security_functions; see README deploy order)."
   type        = bool
   default     = false
 }

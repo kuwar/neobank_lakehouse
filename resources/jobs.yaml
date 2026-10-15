@@ -48,7 +48,20 @@ resources:
           pipeline_task:
             pipeline_id: ${resources.pipelines.neobank_medallion.id}
 
-        # 3) Create/refresh the Unity Catalog metric views (semantic layer).
+        # 3) Tag sensitive gold columns (pci / pii / region_sensitive) so the
+        #    Terraform-managed ABAC policies pick them up.
+        - task_key: tag_gold_columns
+          depends_on:
+            - task_key: build_medallion
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            parameters:
+              catalog: "${var.catalog}"
+              gold_schema: "${var.gold_schema}"
+            file:
+              path: ../src/governance/tag_gold_columns.sql
+
+        # 4) Create/refresh the Unity Catalog metric views (semantic layer).
         - task_key: build_metrics_views
           depends_on:
             - task_key: build_medallion

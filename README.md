@@ -277,9 +277,12 @@ you can iterate freely without touching anything shared.
 
 ### Deploy order: Terraform + bundle
 
-Infrastructure and governance (catalog, schemas, grants, governed tags, column tag
-assignments, ABAC policies) are managed by Terraform in `terraform/`. Pipelines,
-jobs, the gold tables and the mask/row-filter UDFs are managed by the bundle.
+Each tool owns what changes with it:
+
+| Owner | What | Why |
+|---|---|---|
+| Terraform (`terraform/`) | catalog, schemas, volume, grants, governed tag definitions (`pci`, `pii`, `region_sensitive`), ABAC policies | Platform and governance rules; change rarely |
+| Bundle | pipelines, jobs, gold tables, mask/row-filter UDFs, **column tag assignments** (`src/governance/tag_gold_columns.sql`) | Change with the data model; a new sensitive column is tagged in the same PR that adds it |
 
 **Choosing the environment.** Both tools read the target from `.env` via
 [direnv](https://direnv.net/). Set `TARGET_ENV=dev` (or `prod`) in `.env`; `.envrc`
@@ -295,8 +298,10 @@ derives everything else from it:
 Run `direnv allow` once, and again after editing `.envrc`. Terraform still keeps a
 single state, so it manages one environment at a time.
 
-Unity Catalog rejects a policy whose function doesn't exist yet and a column tag on
-a table that doesn't exist yet. So on a fresh workspace, deploy in this order:
+Unity Catalog rejects a policy whose function doesn't exist yet, so the policies
+wait for the UDFs. Column tags are set by the `tag_gold_columns` task in
+`neobank_daily`, right after the pipeline builds the tables. On a fresh workspace,
+deploy in this order:
 
 ```bash
 # 0. Once per environment: create the catalog with SQL (Free Edition's Default
@@ -304,18 +309,23 @@ a table that doesn't exist yet. So on a fresh workspace, deploy in this order:
 #    CREATE CATALOG IF NOT EXISTS neobank_dev;       -- in the SQL editor
 terraform -chdir=terraform import databricks_catalog.neobank "$CATALOG"
 
-# 1. Base infrastructure: schemas, volume, grants, tag definitions
-#    (column tag assignments and ABAC policies are skipped)
+# 1. Base infrastructure: schemas, volume, grants, governed tag definitions
+#    (ABAC policies are skipped)
 cd terraform && terraform apply
 
-# 2. Deploy the bundle, create the UDFs, and build the gold tables
+# 2. Deploy the bundle and create the mask / row-filter UDFs
 cd .. && databricks bundle deploy
 databricks bundle run neobank_security_functions
-databricks bundle run neobank_daily                 # uses compute
 
-# 3. Column tag assignments + ABAC policies, which can now find their tables and UDFs
+# 3. ABAC policies, which can now find their UDFs
 cd terraform && terraform apply -var enable_abac_policies=true
+
+# 4. Build the tables; tag_gold_columns tags them and the policies apply at once
+cd .. && databricks bundle run neobank_daily       # uses compute
 ```
+
+The two Terraform applies are a one-time step per environment. After that, a new
+sensitive column needs only a change to `tag_gold_columns.sql`.
 
 See [`docs/ABAC_TAGS_POLICIES.md` §5](docs/ABAC_TAGS_POLICIES.md) for why the
 dependency chain looks like this.
