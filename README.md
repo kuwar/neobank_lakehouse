@@ -275,6 +275,73 @@ databricks bundle destroy -t dev
 In `dev` mode, every resource is prefixed `[dev <you>]` and schedules are paused, so
 you can iterate freely without touching anything shared.
 
+### Deploy order: Terraform + bundle
+
+Each tool owns what changes with it:
+
+| Owner | What | Why |
+|---|---|---|
+| Terraform (`terraform/`) | catalog, schemas, volume, grants, governed tag definitions (`pci`, `pii`, `region_sensitive`), ABAC policies | Platform and governance rules; change rarely |
+| Bundle | pipelines, jobs, gold tables, mask/row-filter UDFs, **column tag assignments** (`src/governance/tag_gold_columns.sql`) | Change with the data model; a new sensitive column is tagged in the same PR that adds it |
+
+**Choosing the environment.** Both tools read the target from `.env` via
+[direnv](https://direnv.net/). Set `TARGET_ENV=dev` (or `prod`) in `.env`; `.envrc`
+derives everything else from it:
+
+| Variable | Value | Read by |
+|---|---|---|
+| `DATABRICKS_BUNDLE_TARGET` | `$TARGET_ENV` | bundle (replaces `-t`) |
+| `BUNDLE_VAR_catalog` | `neobank_$TARGET_ENV` | bundle `${var.catalog}` |
+| `TF_VAR_env` | `$TARGET_ENV` | Terraform `var.env` |
+| `TF_VAR_catalog` | `neobank_$TARGET_ENV` | Terraform `var.catalog` |
+
+Run `direnv allow` once, and again after editing `.envrc`. Terraform still keeps a
+single state, so it manages one environment at a time.
+
+Unity Catalog rejects a policy whose function doesn't exist yet, so the policies
+wait for the UDFs. Column tags are set by the `tag_gold_columns` task in
+`neobank_daily`, right after the pipeline builds the tables. On a fresh workspace,
+deploy in this order:
+
+```bash
+# 0. Once per environment: create the catalog with SQL (Free Edition's Default
+#    Storage only works through SQL/UI, not the catalog API), then adopt it
+#    CREATE CATALOG IF NOT EXISTS neobank_dev;       -- in the SQL editor
+terraform -chdir=terraform import databricks_catalog.neobank "$CATALOG"
+
+# 1. Base infrastructure: schemas, volume, grants, governed tag definitions
+#    (ABAC policies are skipped)
+cd terraform && terraform apply
+
+# 2. Deploy the bundle and create the mask / row-filter UDFs
+cd .. && databricks bundle deploy
+databricks bundle run neobank_security_functions
+
+# 3. ABAC policies, which can now find their UDFs
+cd terraform && terraform apply -var enable_abac_policies=true
+
+# 4. Build the tables; tag_gold_columns tags them and the policies apply at once
+cd .. && databricks bundle run neobank_daily       # uses compute
+```
+
+The two Terraform applies are a one-time step per environment. After that, a new
+sensitive column needs only a change to `tag_gold_columns.sql`.
+
+See [`docs/ABAC_TAGS_POLICIES.md` §5](docs/ABAC_TAGS_POLICIES.md) for why the
+dependency chain looks like this.
+
+After the first rollout, set `enable_abac_policies = true` in
+`terraform/terraform.tfvars` so plain `terraform apply` keeps the policies in place.
+
+Rerun `neobank_security_functions` whenever you change a file in `src/udf/`. The
+UDFs use `CREATE OR REPLACE`, so reruns are safe. Never drop or rename a UDF while
+a policy still references it: remove the policy in Terraform first, then the
+function.
+
+> **Free Edition:** `pci-readers`, `pii-readers` and `global-analysts` are
+> account-level groups, so Terraform can't manage who is in them. Add members by
+> hand under Settings → Identity and access → Groups.
+
 ---
 
 ## How a run flows end to end
@@ -367,6 +434,12 @@ Defined in `databricks.yml`. Override per target, or ad hoc with `--var "name=va
   to the volume via the UI once, then re-run.
 - Free Edition is free forever; the only limit is a daily compute quota that pauses
   compute (never deletes data) if exceeded.
+- **Group membership is manual.** `data-engineers`, `pci-readers`, `pii-readers`
+  and `global-analysts` are account-level groups, and Free Edition has no account
+  console or account API, so Terraform can't add members (`databricks_group_member`
+  fails with "can only be managed in account"). Add members under Settings →
+  Identity and access → Groups. Service principals are different: Terraform can
+  create them from the workspace (see `terraform/sp_dabs.tf`).
 
 ---
 

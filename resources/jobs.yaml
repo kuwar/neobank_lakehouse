@@ -48,7 +48,20 @@ resources:
           pipeline_task:
             pipeline_id: ${resources.pipelines.neobank_medallion.id}
 
-        # 3) Create/refresh the Unity Catalog metric views (semantic layer).
+        # 3) Tag sensitive gold columns (pci / pii / region_sensitive) so the
+        #    Terraform-managed ABAC policies pick them up.
+        - task_key: tag_gold_columns
+          depends_on:
+            - task_key: build_medallion
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            parameters:
+              catalog: "${var.catalog}"
+              gold_schema: "${var.gold_schema}"
+            file:
+              path: ../src/governance/tag_gold_columns.sql
+
+        # 4) Create/refresh the Unity Catalog metric views (semantic layer).
         - task_key: build_metrics_views
           depends_on:
             - task_key: build_medallion
@@ -60,8 +73,25 @@ resources:
               - "${var.catalog}"
               - "--metrics-view-schema"
               - "${var.metrics_view_schema}"
-        
-        # 4) Create/Refresh UC object (function) - column level functions
+
+      # Serverless wheel install — this DOES work for spark_python_task
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "3"          # serverless env version; bump if validate complains
+            dependencies:
+              - ../dist/*.whl
+
+    # Mask / row-filter UDFs that the Terraform ABAC policies point at.
+    # Kept out of neobank_daily so it can run on its own between the two
+    # Terraform applies (see README "Deploy order"). CREATE OR REPLACE, so safe to rerun.
+    neobank_security_functions:
+      name: neobank_security_functions
+      tags:
+        project: neobank
+        layer: governance
+      tasks:
+        # Column-level masking functions
         - task_key: udf_column_level_security
           sql_task:
             warehouse_id: ${var.warehouse_id}
@@ -71,7 +101,7 @@ resources:
             file:
               path: ../src/udf/uc_columns_functions.sql
 
-        # 5) Create/Refresh UC object (function) - rows level functions
+        # Row-level filter functions
         - task_key: udf_rows_level_security
           sql_task:
             warehouse_id: ${var.warehouse_id}
@@ -80,11 +110,3 @@ resources:
               gold_schema: "${var.gold_schema}"
             file:
               path: ../src/udf/uc_rows_functions.sql
-
-      # Serverless wheel install — this DOES work for spark_python_task
-      environments:
-        - environment_key: default
-          spec:
-            environment_version: "3"          # serverless env version; bump if validate complains
-            dependencies:
-              - ../dist/*.whl

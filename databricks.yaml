@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Neobank Lakehouse — Databricks Asset Bundle
+# Neobank Lakehouse — Databricks Declarative Automation Bundle
 # A scalable medallion pipeline (bronze → silver → gold) over neobank data,
 # topped with a Unity Catalog metric-view semantic layer.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -26,8 +26,10 @@ variables:
     description: Warehouse must exist before
     default: dfc7731614511a53
   catalog:
+    # Normally set by BUNDLE_VAR_catalog from .envrc (neobank_${TARGET_ENV}), shared with Terraform.
+    # The per-target values below are the fallback when direnv isn't loaded (e.g. CI).
     description: Unity Catalog catalog for all objects
-    default: neobank
+    default: neobank_dev
   bronze_schema:
     default: bronze
   silver_schema:
@@ -43,12 +45,19 @@ variables:
   sample_rows:
     description: Max transactions to load (0 = all ~13M)
     default: "500000"
+  # Notification destinations are created by Terraform (terraform/alert_notification.tf);
+  # the bundle resolves their UUIDs by display name at deploy time.
   slack_destination_id:
     description: Neobank slack notification - managed using terraform
-    default: '<ID>'
+    lookup:
+      notification_destination: slack_neobank
   email_destination_id:
     description: Neobank email notification - managed using terraform
-    default: '<ID>'
+    lookup:
+      notification_destination: neobank_email_notification
+  cicd_sp_application_id:
+    description: Application ID of the GitHub CI/CD SP (set per target via lookup)
+    default: ""
   oncall_email:
     description: Urgent job failed notify to
     default: 'kuwarsaurav21@gmail.com'
@@ -67,10 +76,20 @@ targets:
     mode: production
     workspace:
       host: https://dbc-31fcc0ce-44e6.cloud.databricks.com
-      # We explicitly deploy to /Workspace/Users/kuwarsaurav21@gmail.com to make sure we only have a single copy.
-      root_path: /Workspace/Users/kuwarsaurav21@gmail.com/.bundle/${bundle.name}/${bundle.target}
+      # One copy in the SP's home, whoever deploys (GitHub SP or you as admin).
+      # Not /Workspace/Shared: that is writable by every workspace user.
+      root_path: /Workspace/Users/${var.cicd_sp_application_id}/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: neobank_prod
+      # GitHub CI/CD SP, created by Terraform (terraform/sp_dabs.tf); resolved to its application ID.
+      cicd_sp_application_id:
+        lookup:
+          service_principal: sp-github-cicd
+    # Prod jobs and pipelines run as the SP, not as whoever deployed.
+    run_as:
+      service_principal_name: ${var.cicd_sp_application_id}
     permissions:
       - user_name: kuwarsaurav21@gmail.com
+        level: CAN_MANAGE
+      - service_principal_name: ${var.cicd_sp_application_id}
         level: CAN_MANAGE

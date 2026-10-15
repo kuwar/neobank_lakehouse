@@ -1,12 +1,3 @@
-variable "databricks_host" {
-  type = string
-}
-
-variable "databricks_token" {
-  type      = string
-  sensitive = true
-}
-
 variable "warehouse_id" {
   type      = string
   sensitive = true
@@ -21,4 +12,23 @@ variable "email_notification_addresses" {
   type        = list(string)
   description = "List of email addresses for the notification destination"
   default     = []
+}
+variable "enable_abac_policies" {
+  description = "Create the ABAC policies. Turn on only after the bundle has created the mask/filter UDFs (job neobank_security_functions; see README deploy order)."
+  type        = bool
+  default     = false
+}
+
+variable "env" {
+  description = "Target environment (dev | prod). Set via TARGET_ENV in .env → TF_VAR_env (.envrc)."
+  type        = string
+  validation {
+    condition     = contains(["dev", "prod"], var.env)
+    error_message = "env must be dev or prod."
+  }
+}
+
+variable "catalog" {
+  description = "Unity Catalog catalog for this environment (neobank_<env>). Set via .envrc → TF_VAR_catalog; shared with the bundle's $${var.catalog}."
+  type        = string
 }
