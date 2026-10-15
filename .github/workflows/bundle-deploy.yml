@@ -1,0 +1,53 @@
+# Dev is a personal sandbox: you deploy it from your laptop, CI only validates it.
+# Prod is deployed by CI only, as the sp-github-cicd service principal (terraform/sp_dabs.tf).
+#
+# GitHub settings → Environments, one per target, each with:
+#   secrets:   DATABRICKS_HOST, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET
+#   variables: DATABRICKS_BUNDLE_TARGET (dev | prod)
+# Client ID / secret: terraform -chdir=terraform output -raw sp_cicd_client_id | sp_cicd_client_secret
+#
+# The prod deploy job is off until the neobank_prod catalog exists: set the repo variable
+# PROD_DEPLOY_ENABLED=true (Settings → Secrets and variables → Actions → Variables) to turn it on.
+name: bundle-deploy
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate-dev:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      DATABRICKS_BUNDLE_TARGET: ${{ vars.DATABRICKS_BUNDLE_TARGET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - run: databricks bundle validate
+
+  deploy-prod:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.PROD_DEPLOY_ENABLED == 'true'
+    needs: validate-dev
+    runs-on: ubuntu-latest
+    environment: prod
+    # Never run two prod deploys at once.
+    concurrency:
+      group: bundle-prod
+      cancel-in-progress: false
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      DATABRICKS_BUNDLE_TARGET: ${{ vars.DATABRICKS_BUNDLE_TARGET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6 # the wheel artifact builds with `uv build --wheel`
+      - uses: databricks/setup-cli@main
+      - run: databricks bundle validate
+      - run: databricks bundle deploy
