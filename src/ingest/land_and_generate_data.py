@@ -1,9 +1,6 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Land raw data into a Unity Catalog volume:
-#   1. Download the Kaggle transactions/users/cards dataset.
-#   2. Generate synthetic device + notification events keyed to real users.
-# The medallion pipeline then reads these files with Auto Loader.
-# ─────────────────────────────────────────────────────────────────────────────
+# Lands raw files in the bronze volume for Auto Loader:
+#   - Kaggle transactions/users/cards/MCC dataset
+#   - synthetic device and notification events for existing client_ids
 import argparse
 import os
 import shutil
@@ -26,18 +23,16 @@ sample_rows = args.sample_rows
 
 vol_root = f"/Volumes/{catalog}/bronze/{volume}"
 
-# Ensure catalog / schema / volume exist (idempotent).
+# Schemas/volume normally come from Terraform; kept idempotent for fresh catalogs.
 for schema in ("bronze", "silver", "gold"):
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
 spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog}.bronze.{volume}")
 
-# UC volumes are ordinary local paths — use os/shutil, never dbutils.fs.
+# Volumes are mounted as local paths, so plain os/shutil works.
 for sub in ("transactions", "users", "cards", "mcc", "device_events", "notifications"):
     os.makedirs(f"{vol_root}/{sub}", exist_ok=True)
 
-# 1) Download the Kaggle dataset.
-#    Requires Kaggle credentials. Locally: `pip install kagglehub` and set
-#    KAGGLE_USERNAME / KAGGLE_KEY (or ~/.kaggle/kaggle.json).
+# Kaggle download. Needs KAGGLE_USERNAME / KAGGLE_KEY (or ~/.kaggle/kaggle.json).
 try:
     import kagglehub
     src = kagglehub.dataset_download("computingvictor/transactions-fraud-datasets")
@@ -52,11 +47,11 @@ try:
             shutil.copy(p, f"{vol_root}/{sub}/{fname}")
     print("Kaggle data landed in", vol_root)
 except Exception as e:
-    # Fallback: upload the CSVs to the volume manually via the UI, then re-run.
+    # No network/credentials: upload the files to the volume manually and re-run.
     print("Kaggle download skipped:", e)
     print(f"Upload the CSVs into {vol_root}/<users|cards|transactions|mcc>/ and re-run.")
 
-# Optional: cap transactions volume while learning (keeps Free Edition quota safe).
+# Cap transaction rows to stay within the Free Edition quota.
 if sample_rows > 0:
     tx_csv = f"{vol_root}/transactions/transactions_data.csv"
     if os.path.exists(tx_csv):
@@ -69,13 +64,13 @@ if sample_rows > 0:
         shutil.move(f"{vol_root}/transactions_sampled", f"{vol_root}/transactions")
         print(f"Capped transactions at {sample_rows:,} rows")
 
-# 2) Generate synthetic device + notification events keyed to real client_ids.
+# Synthetic events, keyed to real client_ids
 users = (spark.read.option("header", True)
          .csv(f"{vol_root}/users/users_data.csv")
          .select(F.col("id").cast("int").alias("client_id"))
          .where("client_id is not null"))
 
-# Device login/session events (one row per session).
+# Device sessions, one row per session
 devices = (users
     .withColumn("n", (F.rand(7) * 8 + 1).cast("int"))
     .withColumn("s", F.explode(F.expr("sequence(1, n)")))
@@ -92,7 +87,7 @@ devices = (users
 
 devices.write.mode("overwrite").json(f"{vol_root}/device_events")
 
-# Notification events (push/email/SMS with an opened flag).
+# Notifications (push/email/SMS) with an opened flag
 notifs = (users
     .withColumn("n", (F.rand(11) * 12 + 1).cast("int"))
     .withColumn("s", F.explode(F.expr("sequence(1, n)")))

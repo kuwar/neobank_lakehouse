@@ -1,9 +1,4 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# SEMANTIC LAYER — Unity Catalog metric views (Business Semantics).
-# A metric view defines DIMENSIONS (what you slice by) and MEASURES (the numbers)
-# once. Every consumer — SQL, dashboards, notebooks, Genie — queries the same
-# governed definition with MEASURE(), so revenue means the same thing everywhere.
-# ─────────────────────────────────────────────────────────────────────────────
+# Metric views over gold: one definition of each KPI for SQL, dashboards and Genie.
 import argparse
 
 from neobank_datalake.db_context import get_spark
@@ -18,7 +13,7 @@ spark = get_spark()
 catalog = args.catalog
 metrics_view = args.metrics_view_schema
 
-# Metric view 1 — Transactions & spend.
+# Transactions and spend
 spark.sql(f"""
 CREATE OR REPLACE VIEW {catalog}.{metrics_view}.mv_transactions
 WITH METRICS
@@ -61,7 +56,7 @@ measures:
 $$
 """)
 
-# Metric view 2 — Customer engagement (notifications + device activity).
+# Engagement: notifications and device activity
 spark.sql(f"""
 CREATE OR REPLACE VIEW {catalog}.{metrics_view}.mv_engagement
 WITH METRICS
@@ -92,7 +87,7 @@ measures:
 $$
 """)
 
-# Query the governed metrics with MEASURE() — grouped by ANY dimension at runtime.
+# Example queries:
 # print("Spend by merchant category:")
 # spark.sql(f"""
 #   SELECT `Merchant category`, MEASURE(`Total spend`) AS spend,
@@ -111,7 +106,3 @@ $$
 #   GROUP BY `Channel`
 #   ORDER BY sent DESC
 # """).show(truncate=False)
-
-# TIP: point an AI/BI Genie space at these two metric views. Because the KPIs are
-# governed, natural-language questions ("open rate for push last month?") resolve
-# to the exact same definitions used by every dashboard.

@@ -1,12 +1,11 @@
-# Governed tag definitions (the vocabulary). Terraform owns these; the bundle assigns
-# them to columns (src/governance/tag_gold_columns.sql, task tag_gold_columns in
-# neobank_daily), because the pipeline owns the tables and their columns.
+# Tag definitions only. Columns are tagged by the bundle
+# (src/governance/tag_gold_columns.sql) since the pipeline owns the tables.
 locals {
-  # Governed tags: tag key → description. Each allows the values "true" / "false".
+  # key => description; each tag allows "true" / "false"
   governed_tags = {
     pii              = "Indicates column contains personal data"
     pci              = "Indicates column contains cardholder data"
-    region_sensitive = "Indicates column contains region sensitive data" # drives the row-level filter
+    region_sensitive = "Indicates column contains region sensitive data" # used by the row filter
   }
 }
 

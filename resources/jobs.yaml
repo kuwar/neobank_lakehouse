@@ -1,5 +1,5 @@
-# Orchestration job: land data -> run the medallion pipeline -> (re)build metric views.
-# Scheduled daily; in dev mode the schedule is auto-paused so it never fires by surprise.
+# Daily run: land data, run the pipeline, tag gold columns, rebuild metric views.
+# Schedule is paused in dev mode.
 resources:
   jobs:
     neobank_daily:
@@ -18,7 +18,7 @@ resources:
         project: neobank
         layer: orchestration
       schedule:
-        quartz_cron_expression: "0 0 5 * * ?"   # 05:00 daily (paused in dev)
+        quartz_cron_expression: "0 0 5 * * ?"   # 05:00 UTC
         timezone_id: UTC
         pause_status: UNPAUSED
       parameters:
@@ -28,7 +28,7 @@ resources:
           default: ${var.sample_rows}
 
       tasks:
-        # 1) Download Kaggle data into the volume + generate synthetic events.
+        # Kaggle download + synthetic device/notification events into the volume
         - task_key: land_data
           environment_key: default
           spark_python_task:
@@ -41,15 +41,13 @@ resources:
               - "--sample-rows"
               - "${var.sample_rows}"
 
-        # 2) Run the medallion pipeline (bronze -> silver -> gold).
         - task_key: build_medallion
           depends_on:
             - task_key: land_data
           pipeline_task:
             pipeline_id: ${resources.pipelines.neobank_medallion.id}
 
-        # 3) Tag sensitive gold columns (pci / pii / region_sensitive) so the
-        #    Terraform-managed ABAC policies pick them up.
+        # Governed tags on sensitive gold columns; the ABAC policies key off them.
         - task_key: tag_gold_columns
           depends_on:
             - task_key: build_medallion
@@ -61,7 +59,6 @@ resources:
             file:
               path: ../src/governance/tag_gold_columns.sql
 
-        # 4) Create/refresh the Unity Catalog metric views (semantic layer).
         - task_key: build_metrics_views
           depends_on:
             - task_key: build_medallion
@@ -74,24 +71,22 @@ resources:
               - "--metrics-view-schema"
               - "${var.metrics_view_schema}"
 
-      # Serverless wheel install — this DOES work for spark_python_task
+      # Wheel for the spark_python_task steps
       environments:
         - environment_key: default
           spec:
-            environment_version: "3"          # serverless env version; bump if validate complains
+            environment_version: "3"
             dependencies:
               - ../dist/*.whl
 
-    # Mask / row-filter UDFs that the Terraform ABAC policies point at.
-    # Kept out of neobank_daily so it can run on its own between the two
-    # Terraform applies (see README "Deploy order"). CREATE OR REPLACE, so safe to rerun.
+    # Mask and row-filter UDFs used by the ABAC policies. Separate job so it can
+    # run before the policies are applied (see README, deploy order).
     neobank_security_functions:
       name: neobank_security_functions
       tags:
         project: neobank
         layer: governance
       tasks:
-        # Column-level masking functions
         - task_key: udf_column_level_security
           sql_task:
             warehouse_id: ${var.warehouse_id}
@@ -101,7 +96,6 @@ resources:
             file:
               path: ../src/udf/uc_columns_functions.sql
 
-        # Row-level filter functions
         - task_key: udf_rows_level_security
           sql_task:
             warehouse_id: ${var.warehouse_id}

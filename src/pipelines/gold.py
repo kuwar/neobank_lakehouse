@@ -1,7 +1,5 @@
 # Databricks notebook source
-# ─────────────────────────────────────────────────────────────────────────────
-# GOLD — a query-able star schema. Conformed dimensions + additive fact tables
-# are exactly what BI tools and metric views expect: fast joins, clear grain.
+# Gold: star schema for BI and the metric views.
 #
 #   dim_users ─┐                 ┌─ dim_date
 #              ├─ fact_transactions
@@ -9,7 +7,6 @@
 #                                └─ dim_mcc_codes
 #   dim_users ─── fact_notifications
 #   dim_users ─── fact_device_activity
-# ─────────────────────────────────────────────────────────────────────────────
 from pyspark.sql import functions as F
 
 from neobank_datalake.db_context import get_dlt, get_spark
@@ -24,7 +21,7 @@ gold  = spark.conf.get("neobank.gold_schema")
 spark.sql(f"USE CATALOG {catalog}")
 spark.sql(f"USE SCHEMA {gold}") 
 
-# ── Dimensions ───────────────────────────────────────────────────────────────
+# Dimensions
 # TODO - users must be SCD Type - 2
 # credit_score, yearly_income, total_debt, num_credit_cards, current_age and both derived bands all change over time.
 # Recommendation changes:
@@ -89,7 +86,7 @@ def dim_date():
         .withColumn("is_weekend", F.dayofweek("date").isin(1, 7)))
 
 
-# ── Facts ────────────────────────────────────────────────────────────────────
+# Facts
 @dp.table(
     comment="Transaction fact at grain = one row per transaction.",
     table_properties={"delta.autoOptimize.optimizeWrite": "true"},

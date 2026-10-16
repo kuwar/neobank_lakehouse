@@ -1,17 +1,7 @@
 # Databricks notebook source
-# ─────────────────────────────────────────────────────────────────────────────
-# BRONZE — raw, append-only ingest, on Apache Spark Declarative Pipelines (SDP).
-#
-# Multi-schema publishing: this file emits tables into the BRONZE schema by
-# giving each @dp.table a FULLY-QUALIFIED name (catalog.schema.table). This lets
-# one pipeline span bronze/silver/gold — a silver file would qualify into the
-# silver schema the same way — instead of every dataset landing in the single
-# default schema set in the pipeline config.
-#
-# Requires the pipeline to be in DEFAULT publishing mode (the default for new
-# pipelines) and Unity Catalog. You need USE CATALOG on the target catalog and
-# create privileges on the target schema; the schema is created on write if absent.
-# ─────────────────────────────────────────────────────────────────────────────
+# Bronze: raw, append-only ingest with Auto Loader.
+# Table names are fully qualified so one pipeline can publish to bronze/silver/gold
+# (requires the default publishing mode).
 from neobank_datalake.db_context import get_dlt, get_spark
 from neobank_datalake.pipelines.bronze_transform_helper import add_ingestion_metadata, build_autoloader
 
@@ -32,17 +22,12 @@ catalog, bronze, root = configure(spark)
 
 
 def _qualify(table: str) -> str:
-    """Build a fully-qualified catalog.schema.table name from pipeline config,
-    so the target schema stays config-driven rather than hard-coded."""
+    """catalog.bronze_schema.table, from pipeline config."""
     return f"{catalog}.{bronze}.{table}"
 
 
 def _ingest(path, fmt, **opts):
-    """Load a source with Auto Loader and attach audit columns.
-
-    NOTE: format("cloudFiles") is Auto Loader — Databricks-only. For local
-    open-source SDP, swap for spark.readStream.format(fmt).load(path).
-    """
+    """Auto Loader read plus audit columns. cloudFiles is Databricks-only."""
     return add_ingestion_metadata(build_autoloader(spark, path, fmt, **opts))
 
 
@@ -64,7 +49,7 @@ def bronze_users():
 def bronze_cards():
     return _ingest(f"{root}/cards", "csv", header="true")
 
-##-------- MCC_codes---------------------
+# MCC codes
 @dp.materialized_view(
     name=_qualify("bronze_mcc_codes"),
     comment="Raw mcc lookup table"

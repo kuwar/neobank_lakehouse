@@ -1,13 +1,11 @@
-# Dev is a personal sandbox: you deploy it from your laptop, CI only validates it.
-# Prod is deployed by CI only, as the sp-github-cicd service principal (terraform/sp_dabs.tf).
+# Dev is deployed locally; CI only validates it. Prod is deployed by CI as sp-github-cicd.
 #
-# GitHub settings → Environments, one per target, each with:
+# GitHub environments (dev, prod):
 #   secrets:   DATABRICKS_HOST, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET
-#   variables: DATABRICKS_BUNDLE_TARGET (dev | prod)
-# Client ID / secret: terraform -chdir=terraform output -raw sp_cicd_client_id | sp_cicd_client_secret
+#   variables: DATABRICKS_BUNDLE_TARGET
+# Client ID/secret: terraform outputs sp_cicd_client_id / sp_cicd_client_secret.
 #
-# The prod deploy job is off until the neobank_prod catalog exists: set the repo variable
-# PROD_DEPLOY_ENABLED=true (Settings → Secrets and variables → Actions → Variables) to turn it on.
+# deploy-prod is disabled until the neobank_prod catalog exists (repo variable PROD_DEPLOY_ENABLED).
 name: bundle-deploy
 
 on:
@@ -36,7 +34,7 @@ jobs:
     needs: validate-dev
     runs-on: ubuntu-latest
     environment: prod
-    # Never run two prod deploys at once.
+    # One prod deploy at a time
     concurrency:
       group: bundle-prod
       cancel-in-progress: false
@@ -47,7 +45,7 @@ jobs:
       DATABRICKS_BUNDLE_TARGET: ${{ vars.DATABRICKS_BUNDLE_TARGET }}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6 # the wheel artifact builds with `uv build --wheel`
+      - uses: astral-sh/setup-uv@v6 # wheel build
       - uses: databricks/setup-cli@main
       - run: databricks bundle validate
       - run: databricks bundle deploy

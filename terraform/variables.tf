@@ -14,13 +14,13 @@ variable "email_notification_addresses" {
   default     = []
 }
 variable "enable_abac_policies" {
-  description = "Create the ABAC policies. Turn on only after the bundle has created the mask/filter UDFs (job neobank_security_functions; see README deploy order)."
+  description = "Create the ABAC policies. Needs the mask/filter UDFs from job neobank_security_functions."
   type        = bool
   default     = false
 }
 
 variable "env" {
-  description = "Target environment (dev | prod). Set via TARGET_ENV in .env → TF_VAR_env (.envrc)."
+  description = "dev or prod. Set from TARGET_ENV via .envrc."
   type        = string
   validation {
     condition     = contains(["dev", "prod"], var.env)
@@ -29,6 +29,6 @@ variable "env" {
 }
 
 variable "catalog" {
-  description = "Unity Catalog catalog for this environment (neobank_<env>). Set via .envrc → TF_VAR_catalog; shared with the bundle's $${var.catalog}."
+  description = "Catalog name, neobank_<env>. Set via .envrc; the bundle uses the same value."
   type        = string
 }

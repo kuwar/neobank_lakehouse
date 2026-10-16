@@ -1,15 +1,17 @@
-# A catalog: the top of the Unity Catalog hierarchy (catalog → schema → tables/views/volumes/functions)
+# Free Edition (Default Storage) can't create catalogs through the API. Create it
+# with SQL, then import:
+#   CREATE CATALOG IF NOT EXISTS neobank_<env>;
+#   terraform import databricks_catalog.neobank neobank_<env>
 resource "databricks_catalog" "neobank" {
   name    = var.catalog
   comment = "Neobank ${var.env} catalog"
 
   lifecycle {
-    ignore_changes  = [storage_root, properties] # set by Default Storage / Databricks (e.g. collation), not by us
-    prevent_destroy = true                       # never let a plan delete this catalog
+    ignore_changes  = [storage_root, properties] # set server-side
+    prevent_destroy = true
   }
 }
 
-# A schema inside that catalog
 resource "databricks_schema" "bronze" {
   catalog_name = databricks_catalog.neobank.name
   name         = "bronze"
@@ -31,7 +33,7 @@ resource "databricks_schema" "metrics_view" {
   comment      = "Business ready data to query using BI tools - eg. Metabase"
 }
 
-# A managed volume for files (CSVs, models, etc.)
+# Landing zone for raw files
 resource "databricks_volume" "raw" {
   catalog_name = databricks_catalog.neobank.name
   schema_name  = databricks_schema.bronze.name

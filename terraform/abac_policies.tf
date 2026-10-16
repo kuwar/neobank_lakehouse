@@ -11,7 +11,6 @@ resource "databricks_policy_info" "mask_pci_columns" {
   except_principals = [data.databricks_group.pci_readers.display_name]
 
 
-  # Match specific columns
   match_columns = [
     {
       condition = "hasTag('pci')"
@@ -40,7 +39,6 @@ resource "databricks_policy_info" "mask_pii_address_columns" {
   except_principals = [data.databricks_group.pii_readers.display_name]
 
 
-  # Match specific columns
   match_columns = [
     {
       condition = "hasTag('pii')"
@@ -69,7 +67,6 @@ resource "databricks_policy_info" "row_filter_region_sensitive" {
   except_principals = [data.databricks_group.global_analysts.display_name]
 
 
-  # Match specific columns
   match_columns = [
     {
       condition = "hasTag('region_sensitive')"
