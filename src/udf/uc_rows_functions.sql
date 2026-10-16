@@ -1,8 +1,5 @@
--- -----------------------------------------------------------------------------
--- Row filter: regional analysts see only their region
--- global-analysts are exempt via the ABAC policy (except_principals), so they
--- never reach this function.
--- -----------------------------------------------------------------------------
+-- Row filter for regional analysts. global-analysts are exempt via the policy.
+-- TODO: this keeps every row with a state; needs a group -> region mapping.
 CREATE OR REPLACE FUNCTION IDENTIFIER(:catalog || '.' || :gold_schema || '.filter_by_region')(merchant_state STRING)
 RETURN (
     merchant_state IN (
@@ -12,8 +9,8 @@ RETURN (
     )
 );
 
--- Applied to dim_merchant, not the fact: the fact has no state column, and
--- filtering the dimension propagates through every metric view join anyway.
+-- Applied to dim_merchant (the fact has no state column); the filter carries
+-- through the metric view joins.
 -- ALTER TABLE gold.dim_merchant SET ROW FILTER gold.filter_by_region ON (merchant_state);
  
 -- -----------------------------------------------------------------------------

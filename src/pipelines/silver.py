@@ -1,9 +1,6 @@
 # Databricks notebook source
-# ─────────────────────────────────────────────────────────────────────────────
-# SILVER — clean, type, conform, and enforce data quality.
-# @dp.expect_* rules make quality a first-class, monitored part of the pipeline:
-# bad rows are dropped (and counted) instead of silently poisoning analytics.
-# ─────────────────────────────────────────────────────────────────────────────
+# Silver: typed, cleaned and deduplicated. Bad rows are dropped by @dp.expect_* rules
+# and show up in the pipeline's data quality metrics.
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
@@ -19,7 +16,7 @@ spark.sql(f"USE CATALOG {catalog}")
 spark.sql(f"USE SCHEMA {silver}") 
 
 
-# ── Users ────────────────────────────────────────────────────────────────────
+# Users
 @dp.table(comment="Cleaned customers, one row per client.")
 @dp.expect_or_drop("valid_client", "client_id IS NOT NULL")
 @dp.expect("plausible_age", "current_age BETWEEN 16 AND 110")
@@ -46,7 +43,7 @@ def silver_users():
     )
 
 
-# ── Cards ────────────────────────────────────────────────────────────────────
+# Cards
 @dp.table(comment="Cleaned cards.")
 @dp.expect_or_drop("valid_card", "card_id IS NOT NULL AND client_id IS NOT NULL")
 def silver_cards():
@@ -76,7 +73,7 @@ def silver_cards():
     )
 
 
-# ── Transactions ─────────────────────────────────────────────────────────────
+# Transactions
 @dp.table(comment="Cleaned transactions with parsed amount and MCC join.")
 @dp.expect_or_drop("valid_txn", "transaction_id IS NOT NULL AND client_id IS NOT NULL")
 @dp.expect("nonzero_amount", "amount <> 0")
@@ -88,7 +85,7 @@ def silver_transactions():
             F.to_timestamp("date").alias("transaction_ts"),
             F.col("client_id").cast("int").alias("client_id"),
             F.col("card_id").cast("int").alias("card_id"),
-            # Amounts arrive like "$-77.00" — strip symbols and cast.
+            # e.g. "$-77.00"
             F.regexp_replace("amount", r"[$,]", "").cast("double").alias("amount"),
             F.col("use_chip"),
             F.col("merchant_id").cast("int").alias("merchant_id"),
@@ -117,7 +114,7 @@ def silver_transactions():
     return tx.withColumn("transaction_date", F.to_date("transaction_ts"))
 
 
-# ── MCC codes ────────────────────────────────────────────────────────────
+# MCC codes
 @dp.materialized_view(
     name="silver_mcc_codes",
     comment="Merchant Category Codes: one row per code.",
@@ -132,7 +129,7 @@ def silver_mcc_codes():
     )
 
 
-# ── Device events ────────────────────────────────────────────────────────────
+# Device events
 @dp.table(comment="Cleaned device/session events.")
 @dp.expect_or_drop("valid_event", "client_id IS NOT NULL AND event_ts IS NOT NULL")
 def silver_device_events():
@@ -146,7 +143,7 @@ def silver_device_events():
     )
 
 
-# ── Notifications ────────────────────────────────────────────────────────────
+# Notifications
 @dp.table(comment="Cleaned notification deliveries.")
 @dp.expect_or_drop("valid_notif", "notification_id IS NOT NULL AND client_id IS NOT NULL")
 def silver_notifications():

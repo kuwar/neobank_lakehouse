@@ -6,7 +6,6 @@ data "databricks_group" "pii_readers" {
   display_name = "pii-readers"
 }
 
-# A group that will act as our "Data Engineers role"
 data "databricks_group" "data_engineers" {
   display_name = "data-engineers"
 }

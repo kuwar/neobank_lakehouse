@@ -1,15 +1,14 @@
-# Lakeflow Declarative Pipeline (formerly Delta Live Tables) that builds the
-# full bronze → silver → gold medallion in one governed, incremental pipeline.
+# Single pipeline for bronze, silver and gold.
 resources:
   pipelines:
     neobank_medallion:
       name: neobank_medallion
       serverless: true                 # required on Free Edition
-      catalog: ${var.catalog}          # Unity Catalog target
-      schema: ${var.gold_schema}       # default publish schema; layers set their own
-      continuous: false                # triggered runs (cheaper); set true for streaming
+      catalog: ${var.catalog}
+      schema: ${var.gold_schema}       # default; each layer sets its own
+      continuous: false                # triggered
 
-      # Serverless installs custom code via the environment, NOT via libraries: - whl:
+      # Serverless takes the wheel via environment, not libraries.
       environment:
         dependencies:
           - ../dist/*.whl

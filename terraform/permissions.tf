@@ -11,9 +11,8 @@ resource "databricks_grants" "neobank_catalog" {
     privileges = ["USE_CATALOG"]
   }
 
-  # GitHub CI/CD SP: the prod bundle runs as this SP (run_as), so it builds the
-  # pipeline tables, metric views and mask/filter UDFs. Granted on the catalog,
-  # so it inherits to every schema (schemas themselves stay Terraform-owned).
+  # CI/CD SP. The prod bundle runs as this SP, so it creates the tables, MVs
+  # and UDFs. Granted at catalog level to cover every schema.
   grant {
     principal = databricks_service_principal.sp_cicd.application_id
     privileges = ["USE_CATALOG", "USE_SCHEMA", "SELECT", "MODIFY", "EXECUTE",

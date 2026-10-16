@@ -1,8 +1,4 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Neobank Lakehouse — Databricks Declarative Automation Bundle
-# A scalable medallion pipeline (bronze → silver → gold) over neobank data,
-# topped with a Unity Catalog metric-view semantic layer.
-# ─────────────────────────────────────────────────────────────────────────────
+# Neobank lakehouse: medallion pipeline (bronze/silver/gold) plus metric views on gold.
 bundle:
   name: neobank_lakehouse
 
@@ -20,14 +16,14 @@ sync:
   exclude:
     - src/*.lvdash.json
 
-# Reusable values. Override per target below or with --var "name=value".
+# Override per target or with --var name=value.
 variables: 
   warehouse_id:
     description: Warehouse must exist before
     default: dfc7731614511a53
   catalog:
-    # Normally set by BUNDLE_VAR_catalog from .envrc (neobank_${TARGET_ENV}), shared with Terraform.
-    # The per-target values below are the fallback when direnv isn't loaded (e.g. CI).
+    # Set from .envrc (BUNDLE_VAR_catalog), same value as Terraform.
+    # Target values below are the fallback, e.g. in CI.
     description: Unity Catalog catalog for all objects
     default: neobank_dev
   bronze_schema:
@@ -41,12 +37,11 @@ variables:
   volume:
     description: Volume that holds landed raw files
     default: raw
-  # Keep this small while learning on Free Edition; raise for a real run.
+  # Kept small for the Free Edition quota.
   sample_rows:
     description: Max transactions to load (0 = all ~13M)
     default: "500000"
-  # Notification destinations are created by Terraform (terraform/alert_notification.tf);
-  # the bundle resolves their UUIDs by display name at deploy time.
+  # Destinations are managed in Terraform (alert_notification.tf); looked up by name.
   slack_destination_id:
     description: Neobank slack notification - managed using terraform
     lookup:
@@ -63,7 +58,7 @@ variables:
     default: 'kuwarsaurav21@gmail.com'
 
 targets:
-  # Personal sandbox — names prefixed [dev you], schedules paused. Safe + cheap.
+  # Personal sandbox: [dev <user>] prefix, schedules paused.
   dev:
     mode: development
     default: true
@@ -76,16 +71,15 @@ targets:
     mode: production
     workspace:
       host: https://dbc-31fcc0ce-44e6.cloud.databricks.com
-      # One copy in the SP's home, whoever deploys (GitHub SP or you as admin).
-      # Not /Workspace/Shared: that is writable by every workspace user.
+      # SP home: one copy regardless of who deploys. /Workspace/Shared is writable by all users.
       root_path: /Workspace/Users/${var.cicd_sp_application_id}/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: neobank_prod
-      # GitHub CI/CD SP, created by Terraform (terraform/sp_dabs.tf); resolved to its application ID.
+      # CI/CD SP (terraform/sp_dabs.tf), resolved to its application ID.
       cicd_sp_application_id:
         lookup:
           service_principal: sp-github-cicd
-    # Prod jobs and pipelines run as the SP, not as whoever deployed.
+    # Prod jobs and pipelines run as the SP.
     run_as:
       service_principal_name: ${var.cicd_sp_application_id}
     permissions:
