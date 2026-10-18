@@ -22,7 +22,7 @@ variables:
     description: Warehouse must exist before
     default: dfc7731614511a53
   catalog:
-    # Set from .envrc (BUNDLE_VAR_catalog), same value as Terraform.
+    # Set from .envrc (BUNDLE_VAR_catalog). Must match terraform/modules/neobank_env (neobank_<env>).
     # Target values below are the fallback, e.g. in CI.
     description: Unity Catalog catalog for all objects
     default: neobank_dev
@@ -41,7 +41,7 @@ variables:
   sample_rows:
     description: Max transactions to load (0 = all ~13M)
     default: "500000"
-  # Destinations are managed in Terraform (alert_notification.tf); looked up by name.
+  # Destinations are managed in Terraform (terraform/shared/notifications.tf); looked up by name.
   slack_destination_id:
     description: Neobank slack notification - managed using terraform
     lookup:
@@ -75,7 +75,7 @@ targets:
       root_path: /Workspace/Users/${var.cicd_sp_application_id}/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: neobank_prod
-      # CI/CD SP (terraform/sp_dabs.tf), resolved to its application ID.
+      # CI/CD SP (terraform/shared/service_principals.tf), resolved to its application ID.
       cicd_sp_application_id:
         lookup:
           service_principal: sp-github-cicd
