@@ -29,7 +29,8 @@ and code) is deployed from this repo with Terraform and the bundle.
 12. [Free Edition notes](#free-edition--serverless-notes)
 13. [Troubleshooting](#troubleshooting)
 14. [Extending the project](#extending-the-project)
-15. [References](#references)
+15. [Documentation](#documentation)
+16. [References](#references)
 
 ---
 
@@ -231,7 +232,7 @@ neobank_lakehouse/
 │   ├── udf/                           # mask / row-filter UDFs for the ABAC policies
 │   ├── neobank_datalake/              # shared Python package, built as the wheel
 │   └── dashboards/neobank_analytics.lvdash.json  # AI/BI dashboard (dev copy)
-├── terraform/                         # see "Deploy order: Terraform + bundle"
+├── terraform/                         # see docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md
 │   ├── modules/                       # uc_catalog · uc_abac_policies · neobank_env
 │   ├── shared/                        # workspace-wide objects, one state
 │   └── envs/{dev,prod}/               # one root and state per environment
@@ -274,11 +275,11 @@ databricks current-user me           # verify
 direnv allow
 
 # 3. Infrastructure first: the bundle expects the catalog, schemas and volume
-#    (first time on a workspace: follow "Deploy order" below)
+#    (first time: docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md §5)
 make tf-shared-plan && make tf-plan
 
 # 4. Validate & preview the bundle — FREE, no compute
-databricks bundle validate
+make validate
 databricks bundle plan
 
 # 5. Deploy to your dev sandbox — FREE
@@ -297,126 +298,14 @@ databricks bundle destroy
 
 In `dev` mode, every resource is prefixed `[dev <you>]` and schedules are paused, so
 you can iterate freely without touching anything shared. Prod is deployed by CI, not
-from your machine (see [CI/CD](#cicd)).
+from your machine.
 
-### Deploy order: Terraform + bundle
+### Environments and infrastructure
 
-Each object has exactly one owner, and each tool owns what changes with it:
-
-| Owner | What | Why |
-|---|---|---|
-| `terraform/shared` (once per workspace) | `sp-github-cicd` + secrets, notification destinations, governed tag definitions (`pci`, `pii`, `region_sensitive`), warehouse permissions | Exist once in the workspace no matter how many envs; tag keys are account-wide |
-| `terraform/envs/<env>` (once per env) | catalog `neobank_<env>`, schemas, volume, grants, ABAC policies | Platform and governance rules per env; change rarely |
-| Bundle | pipelines, jobs, gold tables, mask/row-filter UDFs, **column tag assignments** (`src/governance/tag_gold_columns.sql`) | Change with the data model; a new sensitive column is tagged in the same PR that adds it |
-
-The tools only reference each other **by name** (`neobank_<env>`, `slack_neobank`,
-`sp-github-cicd`), never by ID or shared state. Rules that keep them apart:
-
-- The bundle never creates UC containers (no `catalogs:`/`schemas:`/`volumes:`
-  resources, no `CREATE SCHEMA` in jobs). `land_data` fails fast if the volume is missing.
-- No grants outside Terraform on Terraform-owned securables: `databricks_grants` is
-  authoritative and revokes them on the next apply.
-- No per-env copies of workspace-wide objects; add them to `terraform/shared`.
-
-```
-terraform/
-  modules/
-    uc_catalog/        generic: catalog, schemas, volumes, authoritative grants
-    uc_abac_policies/  generic: tag-driven column masks / row filters on a schema
-    neobank_env/       composition: neobank's schemas, principals and policies for one env
-  shared/              root, own state: workspace-wide objects
-  envs/dev, envs/prod  thin roots, own state each: module "neobank" { env = "<env>" }
-```
-
-**Choosing the environment.** Both tools read the target from `.env` via
-[direnv](https://direnv.net/). Set `TARGET_ENV=dev` (or `prod`) in `.env`; `.envrc`
-derives everything else from it:
-
-| Variable | Value | Read by |
-|---|---|---|
-| `DATABRICKS_BUNDLE_TARGET` | `$TARGET_ENV` | bundle (replaces `-t`) |
-| `BUNDLE_VAR_catalog` | `neobank_$TARGET_ENV` | bundle `${var.catalog}` |
-| `TF_ENV_DIR` | `terraform/envs/$TARGET_ENV` | `make tf-plan` / `make tf-apply` |
-
-Run `direnv allow` once, and again after editing `.envrc`. Terraform picks the env by
-directory, so each env has its own state and dev and prod can't overwrite each other.
-
-Unity Catalog rejects a policy whose function doesn't exist yet, so the policies
-wait for the UDFs. Column tags are set by the `tag_gold_columns` task in
-`neobank_daily`, right after the pipeline builds the tables. On a fresh workspace,
-deploy in this order:
-
-```bash
-# 0. Once per workspace: identities, destinations, tag definitions
-#    (copy terraform/shared/terraform.tfvars.example to terraform.tfvars first)
-make tf-shared-apply
-
-# 1. Once per environment: create the catalog with SQL (Free Edition's Default
-#    Storage only works through SQL/UI, not the catalog API). The import block in
-#    terraform/envs/<env>/main.tf adopts it; plan fails until it exists.
-#    CREATE CATALOG IF NOT EXISTS neobank_prod;       -- in the SQL editor
-
-# 2. Base infrastructure: schemas, volume, grants (ABAC policies are skipped)
-make tf-apply
-
-# 3. Deploy the bundle and create the mask / row-filter UDFs
-make deploy
-databricks bundle run neobank_security_functions
-
-# 4. ABAC policies, which can now find their UDFs: set
-#    enable_abac_policies = true in terraform/envs/<env>/terraform.tfvars
-make tf-apply
-
-# 5. Build the tables; tag_gold_columns tags them and the policies apply at once
-databricks bundle run neobank_daily       # uses compute
-```
-
-Steps 0, 1, 2 and 4 are one-time per workspace/environment. After that, a new
-sensitive column needs only a change to `tag_gold_columns.sql`.
-
-See [`docs/ABAC_TAGS_POLICIES.md` §5](docs/ABAC_TAGS_POLICIES.md) for why the
-dependency chain looks like this.
-
-State is local and gitignored (it holds SP secrets). Before running Terraform in CI,
-move each root to a remote backend (see the comment in each `versions.tf`).
-
-Rerun `neobank_security_functions` whenever you change a file in `src/udf/`. The
-UDFs use `CREATE OR REPLACE`, so reruns are safe. Never drop or rename a UDF while
-a policy still references it: remove the policy in Terraform first, then the
-function.
-
-> **Free Edition:** `pci-readers`, `pii-readers` and `global-analysts` are
-> account-level groups, so Terraform can't manage who is in them. Add members by
-> hand under Settings → Identity and access → Groups.
-
-### CI/CD
-
-`.github/workflows/bundle-deploy.yml` runs on every PR and push to `main`:
-
-| Job | When | What |
-|---|---|---|
-| `validate-dev` | every PR and push | `databricks bundle validate` against the `dev` GitHub environment |
-| `deploy-prod` | push to `main`, and repo variable `PROD_DEPLOY_ENABLED=true` | `bundle validate` + `bundle deploy` as `sp-github-cicd`, one at a time |
-
-Both GitHub environments (`dev`, `prod`) need the secrets `DATABRICKS_HOST`,
-`DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET` and the variable
-`DATABRICKS_BUNDLE_TARGET`. Take the client ID and secret from Terraform:
-
-```bash
-terraform -chdir=terraform/shared output sp_cicd_client_id
-terraform -chdir=terraform/shared output -raw sp_cicd_client_secret
-```
-
-**Dashboard per env.** A metric-view dataset needs a fully qualified `asset_name`;
-`dataset_catalog` / `dataset_schema` don't apply to it. So
-`src/dashboards/neobank_analytics.lvdash.json` is the dev copy you edit, and `make dashboards
-TARGET_ENV=prod` renders `build/dashboards/neobank_analytics.prod.lvdash.json` with
-`neobank_prod` names (gitignored, CI runs it before deploy). After editing the
-dashboard in the dev workspace, pull it back with
-`databricks bundle generate dashboard --resource neobank_analytics --force`.
-
-CI deploys only the bundle. Terraform is still applied locally, so run
-`make tf-apply` for prod (with `TARGET_ENV=prod`) before enabling `deploy-prod`.
+Infrastructure (catalog, schemas, grants, identities) is managed by Terraform, and
+code by the bundle. Dev and prod are selected with one variable, `TARGET_ENV`.
+First-time setup of a workspace or environment, the deploy order, CI/CD and adding
+an environment are in **[docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md](docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md)**.
 
 ---
 
@@ -490,7 +379,7 @@ with `--var "name=value"`.
 
 | Variable | Default (dev) | Purpose |
 |---|---|---|
-| `catalog` | `neobank_dev` | Unity Catalog catalog for all objects; set from `.envrc` (`BUNDLE_VAR_catalog`) |
+| `catalog` | `neobank_dev` | Unity Catalog catalog for all objects; set per target (`neobank_<target>`) |
 | `bronze_schema` / `silver_schema` / `gold_schema` / `metrics_view_schema` | `bronze` / `silver` / `gold` / `metrics_view` | Schema per layer (created by Terraform) |
 | `volume` | `raw` | Volume that holds landed raw files |
 | `sample_rows` | `500000` | Cap on transactions loaded (`0` = all ~13M) |
@@ -499,23 +388,8 @@ with `--var "name=value"`.
 | `cicd_sp_application_id` | looked up in `prod` | `sp-github-cicd`; prod `run_as` and root path |
 | `oncall_email` | set in `databricks.yaml` | Email on `neobank_daily` failure |
 
-Terraform inputs live in `terraform.tfvars` files (gitignored; copy the
-`terraform.tfvars.example` next to each):
-
-| Root | Inputs |
-|---|---|
-| `terraform/shared` | `warehouse_id`, `email_notification_addresses`, `slack_webhook_url` (via `TF_VAR_slack_webhook_url` in `.env`) |
-| `terraform/envs/<env>` | `enable_abac_policies` |
-
-**Targets:**
-
-| Target | Mode | Catalog | Runs as | Deployed by |
-|---|---|---|---|---|
-| `dev` | `development` | `neobank_dev` | you | `make deploy` from your machine |
-| `prod` | `production` | `neobank_prod` | `sp-github-cicd` | GitHub Actions on push to `main` |
-
-Both targets load up to `sample_rows` (500k) transactions; override it for prod to
-process the full dataset.
+Terraform inputs, and how the `dev` and `prod` targets differ, are in
+[docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md](docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md) §3–4.
 
 ---
 
@@ -531,12 +405,10 @@ process the full dataset.
   to the volume via the UI once, then re-run.
 - Free Edition is free forever; the only limit is a daily compute quota that pauses
   compute (never deletes data) if exceeded.
-- **Group membership is manual.** `data-engineers`, `pci-readers`, `pii-readers`
-  and `global-analysts` are account-level groups, and Free Edition has no account
-  console or account API, so Terraform can't add members (`databricks_group_member`
-  fails with "can only be managed in account"). Add members under Settings →
-  Identity and access → Groups. Service principals are different: Terraform can
-  create them from the workspace (see `terraform/shared/service_principals.tf`).
+- **Groups are created and filled by hand** in Settings → Identity and access →
+  Groups; Free Edition has no account API. See
+  [docs/DATABRICKS_ACCOUNT_HIERARCHY.md](docs/DATABRICKS_ACCOUNT_HIERARCHY.md) §5.
+- **Catalogs are created with SQL**, not the API; Terraform imports them.
 
 ---
 
@@ -545,16 +417,15 @@ process the full dataset.
 | Symptom | Fix |
 |---|---|
 | `error downloading Terraform … hashicorp.com` | Deploy locally, or run `databricks bundle deployment migrate`. |
-| `land_data`: `/Volumes/neobank_<env>/bronze/raw not found` | Terraform hasn't been applied for this env: `make tf-apply`. |
-| `terraform plan`: `Cannot import non-existent remote object` | Create the catalog first: `CREATE CATALOG IF NOT EXISTS neobank_<env>;` |
-| `bundle validate -t prod`: dashboard file not found | Render it first: `make dashboards TARGET_ENV=prod`. |
-| `lookup` fails for `slack_neobank` / `sp-github-cicd` | Apply `terraform/shared` first: `make tf-shared-apply`. |
 | Auth failures | Regenerate token, re-run `databricks configure`, ensure host has no trailing slash. |
 | `Cluster not found` / node type errors | Remove classic cluster config; the pipeline must be serverless. |
 | Kaggle download fails | Set `KAGGLE_USERNAME`/`KAGGLE_KEY`, or upload CSVs to the volume manually and re-run. |
 | Metric-view DDL rejected | `WITH METRICS LANGUAGE YAML` is a newer feature; verify syntax against the current business-semantics docs. |
 | Pipeline task creates a duplicate | Ensure the job references `${resources.pipelines.neobank_medallion.id}`, not a hardcoded ID. |
 | Compute suddenly unavailable | Free Edition daily quota reached — wait for reset; data is safe. |
+
+Deployment and environment errors (missing volume, catalog import, lookups,
+dashboard file) are covered in [docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md §10](docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md#10-troubleshooting).
 
 ---
 
@@ -571,6 +442,21 @@ Great next exercises, roughly in order of impact:
 - **Agent metadata** (synonyms, display formats) so Genie speaks your business terms.
 - **Alerting** — a Databricks Alert when `Decline rate` crosses a threshold.
 - **File-arrival trigger** on the job so it runs when new data lands, not on a clock.
+
+---
+
+## Documentation
+
+Each doc answers one question:
+
+| Doc | Read it to… |
+|---|---|
+| [MULTI_ENVIRONMENT_DEPLOYMENTS.md](docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md) | set up and deploy dev/prod: Terraform layers, `TARGET_ENV`, deploy order, CI/CD |
+| [ABAC_TAGS_POLICIES.md](docs/ABAC_TAGS_POLICIES.md) | understand the governance design: expectations, masks, governed tags, ABAC, cross-tool ordering |
+| [DATABRICKS_ACCOUNT_HIERARCHY.md](docs/DATABRICKS_ACCOUNT_HIERARCHY.md) | set up the groups and service principals this project expects (Free Edition) |
+| [DATABRICKS_PERMISSIONS.md](docs/DATABRICKS_PERMISSIONS.md) | look up any Databricks permission: account, workspace and Unity Catalog reference |
+| [databricks-bundles-full-tutorial.md](docs/databricks-bundles-full-tutorial.md) | learn Asset Bundles from scratch: CLI, `databricks.yml`, tutorials |
+| [databricks-bundle-file-references-reference.md](docs/databricks-bundle-file-references-reference.md) | reference files correctly from job tasks and pipeline libraries |
 
 ---
 

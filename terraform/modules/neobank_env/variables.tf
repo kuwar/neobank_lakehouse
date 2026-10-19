@@ -1,6 +1,7 @@
 variable "env" {
-  description = "dev or prod"
+  description = "Environment name: dev or prod. Sets the catalog name, neobank_<env>."
   type        = string
+
   validation {
     condition     = contains(["dev", "prod"], var.env)
     error_message = "env must be dev or prod."
@@ -13,20 +14,20 @@ variable "enable_abac_policies" {
   default     = false
 }
 
-# Created in terraform/shared
 variable "cicd_sp_name" {
-  type    = string
-  default = "sp-github-cicd"
+  description = "Display name of the CI/CD service principal created in terraform/shared."
+  type        = string
+  default     = "sp-github-cicd"
 }
 
-# Created by hand (see terraform/shared/service_principals.tf)
 variable "metabase_sp_name" {
-  type    = string
-  default = "sp-metabase-reader"
+  description = "Display name of the Metabase service principal, created by hand in the UI."
+  type        = string
+  default     = "sp-metabase-reader"
 }
 
-# Account-level groups. Free Edition can't manage membership from Terraform.
 variable "groups" {
+  description = "Account-level group names. Created and filled by hand: Free Edition has no account API."
   type = object({
     data_engineers  = optional(string, "data-engineers")
     pci_readers     = optional(string, "pci-readers")

@@ -1,11 +1,6 @@
 # Dev is deployed locally; CI only validates it. Prod is deployed by CI as sp-github-cicd.
-#
-# GitHub environments (dev, prod):
-#   secrets:   DATABRICKS_HOST, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET
-#   variables: DATABRICKS_BUNDLE_TARGET
-# Client ID/secret: terraform outputs sp_cicd_client_id / sp_cicd_client_secret.
-#
-# deploy-prod is disabled until the neobank_prod catalog exists (repo variable PROD_DEPLOY_ENABLED).
+# GitHub setup is Terraform-managed (terraform/shared/github.tf): docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md §7
+
 name: bundle-deploy
 
 on:
@@ -19,15 +14,15 @@ jobs:
   validate-dev:
     runs-on: ubuntu-latest
     environment: dev
+    # Host comes from databricks.yaml; secrets are set by terraform/shared/github.tf
     env:
-      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      TARGET_ENV: dev # read by the Makefile, as .env does locally
       DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
       DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
-      DATABRICKS_BUNDLE_TARGET: ${{ vars.DATABRICKS_BUNDLE_TARGET }}
     steps:
       - uses: actions/checkout@v4
       - uses: databricks/setup-cli@main
-      - run: databricks bundle validate
+      - run: make validate
 
   deploy-prod:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.PROD_DEPLOY_ENABLED == 'true'
@@ -38,15 +33,14 @@ jobs:
     concurrency:
       group: bundle-prod
       cancel-in-progress: false
+    # Host comes from databricks.yaml; secrets are set by terraform/shared/github.tf
     env:
-      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      TARGET_ENV: prod
       DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
       DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
-      DATABRICKS_BUNDLE_TARGET: ${{ vars.DATABRICKS_BUNDLE_TARGET }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6 # wheel build
       - uses: databricks/setup-cli@main
-      - run: make dashboards TARGET_ENV=prod # neobank_prod names in the dashboard
-      - run: databricks bundle validate
-      - run: databricks bundle deploy
+      - run: make validate # renders the prod dashboard first
+      - run: make deploy

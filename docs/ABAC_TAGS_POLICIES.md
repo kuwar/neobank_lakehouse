@@ -383,7 +383,8 @@ but the pipeline creates the tables, so Terraform would have to run again after
 every schema-changing deploy (the last stage in §5.3 Option A). Tagging from the
 bundle, right after `build_medallion`, keeps a new sensitive column and its tag in
 the same PR and removes that second Terraform run. Tag keys are account-wide, which
-is why their definitions live in `terraform/shared` rather than per env.
+is why their definitions live in `terraform/shared` rather than per env (layers:
+[MULTI_ENVIRONMENT_DEPLOYMENTS.md §1](MULTI_ENVIRONMENT_DEPLOYMENTS.md#1-the-model-one-workspace-three-layers)).
 
 ---
 
@@ -431,16 +432,9 @@ stages:
 Steps 1–3 run once (or when logic changes); steps 4–5 repeat on every
 schema-changing deploy.
 
-**This repo's order** (README, "Deploy order") has no repeating Terraform step,
-because tagging is a bundle task:
-
-```
-make tf-shared-apply                              # tag definitions (once per workspace)
-make tf-apply                                     # catalog, schemas, grants (once per env)
-make deploy && databricks bundle run neobank_security_functions   # UDFs
-make tf-apply   # with enable_abac_policies = true  # policies (once per env)
-databricks bundle run neobank_daily               # tables, then tag_gold_columns
-```
+**This repo** has no repeating Terraform step, because tagging is a bundle task
+(§4.2). The exact commands are in
+[MULTI_ENVIRONMENT_DEPLOYMENTS.md §5](MULTI_ENVIRONMENT_DEPLOYMENTS.md#5-first-time-setup-of-an-environment).
 
 **Option B — collapse into a single Terraform graph**
 

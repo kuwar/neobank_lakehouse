@@ -1,6 +1,6 @@
 # Generic building block: tag-driven ABAC policies on one schema. Each policy
-# matches columns by governed tag and applies a mask or row-filter UDF.
-#
+# matches columns by governed tag and applies a column mask or row filter UDF.
+
 # Unity Catalog rejects a policy whose UDF doesn't exist yet, so the UDFs (bundle
 # job neobank_security_functions) must be deployed before these are created.
 resource "databricks_policy_info" "this" {

@@ -1,3 +1,4 @@
 output "catalog" {
-  value = module.neobank.catalog
+  description = "Catalog managed by this environment."
+  value       = module.neobank.catalog
 }

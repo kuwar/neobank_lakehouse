@@ -1,8 +1,9 @@
 output "catalog" {
-  value = databricks_catalog.this.name
+  description = "Catalog name."
+  value       = databricks_catalog.this.name
 }
 
-# Schema name => full name (catalog.schema)
 output "schemas" {
-  value = { for k, s in databricks_schema.this : k => s.id }
+  description = "Schema name => full name (catalog.schema)."
+  value       = { for k, s in databricks_schema.this : k => s.id }
 }

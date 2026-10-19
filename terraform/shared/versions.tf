@@ -6,9 +6,13 @@ terraform {
       source  = "databricks/databricks"
       version = "~> 1.127.0"
     }
+    github = {
+      source  = "integrations/github"
+      version = "~> 6.13"
+    }
   }
 
-  # Local state in this directory. Before running Terraform from CI, switch to a
-  # remote backend with one key per root, e.g.:
-  # backend "s3" { bucket = "<bucket>", key = "neobank/shared.tfstate", region = "<region>" }
+  # State is local to this directory. Before running Terraform from CI, switch to
+  # a remote backend with one key per root, for example:
+  #   backend "s3" { bucket = "<bucket>", key = "neobank/shared.tfstate", region = "<region>" }
 }
