@@ -22,7 +22,7 @@ variables:
     description: Warehouse must exist before
     default: dfc7731614511a53
   catalog:
-    # Set from .envrc (BUNDLE_VAR_catalog). Must match terraform/modules/neobank_env (neobank_<env>).
+    # Set per target below. Must match terraform/modules/neobank_env (neobank_<env>).
     # Target values below are the fallback, e.g. in CI.
     description: Unity Catalog catalog for all objects
     default: neobank_dev

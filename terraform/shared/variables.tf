@@ -1,16 +1,41 @@
 variable "warehouse_id" {
-  type      = string
-  sensitive = true
+  description = "SQL warehouse ID (16 hex characters, not the workspace ID)."
+  type        = string
+  sensitive   = true
 }
 
-# Set in .env as TF_VAR_slack_webhook_url
 variable "slack_webhook_url" {
-  type      = string
-  sensitive = true
+  description = "Slack incoming webhook for slack_neobank. Set as TF_VAR_slack_webhook_url in .env."
+  type        = string
+  sensitive   = true
 }
 
 variable "email_notification_addresses" {
+  description = "Email addresses for the neobank_email_notification destination."
   type        = list(string)
-  description = "List of email addresses for the notification destination"
+  default     = []
+}
+
+variable "github_owner" {
+  description = "GitHub user or organisation that owns the repository."
+  type        = string
+  default     = "kuwar"
+}
+
+variable "github_repository" {
+  description = "Repository the CI/CD settings are written to."
+  type        = string
+  default     = "neobank_lakehouse"
+}
+
+variable "prod_deploy_enabled" {
+  description = "Repository variable PROD_DEPLOY_ENABLED. false pauses CI deploys to prod."
+  type        = bool
+  default     = true
+}
+
+variable "prod_reviewers" {
+  description = "GitHub usernames that must approve each prod deploy. Empty: no approval."
+  type        = list(string)
   default     = []
 }

@@ -1,5 +1,5 @@
-# Root for the prod environment: its own state, its own catalog (neobank_prod).
-# Apply terraform/shared first. Run with: make tf-plan / make tf-apply (TARGET_ENV=prod)
+# Root for the prod environment: its own state and its own catalog, neobank_prod.
+# Apply terraform/shared first, then run: make tf-plan / make tf-apply (TARGET_ENV=prod).
 
 locals {
   env = "prod"
@@ -12,9 +12,10 @@ module "neobank" {
   enable_abac_policies = var.enable_abac_policies
 }
 
-# Free Edition can't create catalogs through the API. Create it once with SQL:
+# Free Edition can't create catalogs through the API. Create it once with SQL,
 #   CREATE CATALOG IF NOT EXISTS neobank_prod;
-# and this block adopts it on the first apply (no-op afterwards).
+# and this block adopts it on the first apply. It is a no-op afterwards, and plan
+# fails until the catalog exists.
 import {
   to = module.neobank.module.catalog.databricks_catalog.this
   id = "neobank_${local.env}"

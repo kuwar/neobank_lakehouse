@@ -1,4 +1,4 @@
-.PHONY: install test unit integration clean tf-shared-plan tf-shared-apply tf-plan tf-apply dashboards deploy
+.PHONY: install test unit integration clean tf-shared-plan tf-shared-apply tf-plan tf-apply dashboards validate deploy
 
 install:
 	poetry install
@@ -46,6 +46,9 @@ dashboards:
 	mkdir -p build/dashboards
 	sed 's/"neobank_dev\./"neobank_$(TARGET_ENV)./g' $(DASHBOARD_SRC) > $(DASHBOARD_OUT)
 
-# Bundle target is DATABRICKS_BUNDLE_TARGET, also derived from TARGET_ENV
+# Bundle. Same commands locally and in CI (.github/workflows/bundle-deploy.yml).
+validate: dashboards
+	databricks bundle validate -t $(TARGET_ENV)
+
 deploy: dashboards
 	databricks bundle deploy -t $(TARGET_ENV)

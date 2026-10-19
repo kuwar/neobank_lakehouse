@@ -1,13 +1,15 @@
 # Everything one neobank environment needs in Unity Catalog. Called once per env
-# root (envs/dev, envs/prod); the only per-env input that matters is var.env.
+# root (envs/dev, envs/prod); var.env is the only input that differs.
 #
-# Principals come from terraform/shared or from the account and are looked up
-# by name, so this module never creates anything that exists once per workspace.
+# Principals come from terraform/shared or the account and are looked up by name,
+# so this module never creates anything that exists once per workspace.
 
 locals {
-  catalog = "neobank_${var.env}" # the bundle uses the same name (databricks.yaml targets)
+  # Must match the catalog of the bundle target (databricks.yaml).
+  catalog = "neobank_${var.env}"
 
-  # Bundle: pipeline, gold tables, UDFs, metric views. Prod runs as the CI/CD SP.
+  # The bundle creates the pipeline tables, UDFs and metric views; prod runs as the
+  # CI/CD SP.
   bundle_privileges = ["USE_CATALOG", "USE_SCHEMA", "SELECT", "MODIFY", "EXECUTE",
     "CREATE_TABLE", "CREATE_MATERIALIZED_VIEW", "CREATE_FUNCTION",
   "READ_VOLUME", "WRITE_VOLUME"]
@@ -21,7 +23,8 @@ data "databricks_service_principal" "metabase" {
   display_name = var.metabase_sp_name
 }
 
-# Referenced, not passed as strings, so plan fails early if a group is missing
+# Groups are referenced through data sources rather than plain strings, so plan
+# fails early if one is missing.
 data "databricks_group" "this" {
   for_each     = var.groups
   display_name = each.value
@@ -44,7 +47,7 @@ module "catalog" {
     metrics_view = "Business ready data to query using BI tools - eg. Metabase"
   }
 
-  # Landing zone for raw files
+  # Landing zone for the raw files.
   volumes = {
     raw = { schema = "bronze" }
   }
@@ -57,8 +60,8 @@ module "catalog" {
     (data.databricks_service_principal.cicd.application_id)     = local.bundle_privileges
   }
 
-  # BI reads the metric views only. The views read gold with their owner's
-  # rights, so Metabase needs no grant on gold.
+  # BI reads the metric views only. The views read gold with their owner's rights,
+  # so Metabase needs no grant on gold.
   schema_grants = {
     metrics_view = {
       (data.databricks_service_principal.metabase.application_id) = ["USE_SCHEMA", "SELECT"]
@@ -66,8 +69,8 @@ module "catalog" {
   }
 }
 
-# Column tags are assigned by the bundle (src/governance/tag_gold_columns.sql);
-# the tag keys themselves are defined in terraform/shared.
+# Column tags are assigned by the bundle (src/governance/tag_gold_columns.sql) and
+# the tag keys are defined in terraform/shared.
 module "abac" {
   source = "../uc_abac_policies"
 

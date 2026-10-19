@@ -8,7 +8,7 @@ terraform {
     }
   }
 
-  # Local state in this directory. Before running Terraform from CI, switch to a
-  # remote backend with one key per root, e.g.:
-  # backend "s3" { bucket = "<bucket>", key = "neobank/dev.tfstate", region = "<region>" }
+  # State is local to this directory. Before running Terraform from CI, switch to
+  # a remote backend with one key per root, for example:
+  #   backend "s3" { bucket = "<bucket>", key = "neobank/dev.tfstate", region = "<region>" }
 }

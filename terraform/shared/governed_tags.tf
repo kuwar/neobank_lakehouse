@@ -1,12 +1,14 @@
-# Tag definitions only; tag keys are unique account-wide, so they can't be per env.
-# Columns are tagged by the bundle (src/governance/tag_gold_columns.sql) since the
-# pipeline owns the tables; the ABAC policies per env live in modules/neobank_env.
+# Governed tag definitions. Tag keys are unique account-wide, so they can't be per
+# environment. The bundle tags the columns (src/governance/tag_gold_columns.sql)
+# because the pipeline owns the tables; the ABAC policies live in modules/neobank_env.
+
 locals {
-  # key => description; each tag allows "true" / "false"
+  # Tag key => description. Each tag allows the values "true" and "false";
+  # region_sensitive drives the row filter.
   governed_tags = {
     pii              = "Indicates column contains personal data"
     pci              = "Indicates column contains cardholder data"
-    region_sensitive = "Indicates column contains region sensitive data" # used by the row filter
+    region_sensitive = "Indicates column contains region sensitive data"
   }
 }
 

@@ -1,14 +1,15 @@
-# Generic building block: one catalog, its schemas and volumes, and the grants
-# on them. Knows nothing about neobank; callers pass names and principals.
+# Generic building block: one catalog, its schemas and volumes, and the grants on
+# them. It knows nothing about neobank; callers pass names and principals.
 
-# Free Edition (Default Storage) can't create catalogs through the API. Create it
-# with SQL, then import it from the env root (see envs/<env>/main.tf).
+# Free Edition (Default Storage) can't create catalogs through the API. The catalog
+# is created with SQL and adopted by the import block in envs/<env>/main.tf.
 resource "databricks_catalog" "this" {
   name    = var.name
   comment = var.comment
 
   lifecycle {
-    ignore_changes  = [storage_root, properties] # set server-side
+    # Both are filled in server-side; a diff on storage_root would force replacement.
+    ignore_changes  = [storage_root, properties]
     prevent_destroy = true
   }
 }
@@ -31,8 +32,8 @@ resource "databricks_volume" "this" {
   comment      = each.value.comment
 }
 
-# databricks_grants is authoritative: anything granted outside Terraform on
-# these securables is revoked on the next apply. Keep all grants here.
+# databricks_grants is authoritative: anything granted outside Terraform on these
+# securables is revoked on the next apply, so all grants belong here.
 resource "databricks_grants" "catalog" {
   count   = length(var.catalog_grants) > 0 ? 1 : 0
   catalog = databricks_catalog.this.name
