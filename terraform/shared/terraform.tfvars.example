@@ -1,4 +1,5 @@
 warehouse_id                 = "<sql-warehouse-id>"
+databricks_account_id        = "<account-id>"  # databricks auth describe
 email_notification_addresses = ["you@example.com"]
 
 # GitHub (github.tf). Token: GITHUB_TOKEN in .env

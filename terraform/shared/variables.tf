@@ -10,6 +10,11 @@ variable "slack_webhook_url" {
   sensitive   = true
 }
 
+variable "databricks_account_id" {
+  description = "Databricks account ID, used in the governed tag rule set names. Shown by `databricks auth describe`."
+  type        = string
+}
+
 variable "email_notification_addresses" {
   description = "Email addresses for the neobank_email_notification destination."
   type        = list(string)

@@ -22,3 +22,26 @@ resource "databricks_tag_policy" "governed" {
     { name = "false" },
   ]
 }
+
+# The Terraform runner, kept as manager of each tag below.
+data "databricks_current_user" "me" {}
+
+# Governed tags have their own permissions. In prod the bundle tags columns as the
+# CI/CD SP (task tag_gold_columns), which needs ASSIGN on each tag as well as
+# APPLY TAG on the tables it owns. A rule set replaces every grant on its tag, so
+# the Terraform runner is listed as manager to keep access.
+resource "databricks_access_control_rule_set" "governed_tag" {
+  for_each = databricks_tag_policy.governed
+
+  name = "accounts/${var.databricks_account_id}/tagPolicies/${each.value.id}/ruleSets/default"
+
+  grant_rules {
+    principals = [data.databricks_current_user.me.acl_principal_id]
+    role       = "roles/tagPolicy.manager"
+  }
+
+  grant_rules {
+    principals = [databricks_service_principal.sp_cicd.acl_principal_id]
+    role       = "roles/tagPolicy.assigner"
+  }
+}
