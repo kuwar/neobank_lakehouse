@@ -47,5 +47,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6 # wheel build
       - uses: databricks/setup-cli@main
+      - run: make dashboards TARGET_ENV=prod # neobank_prod names in the dashboard
       - run: databricks bundle validate
       - run: databricks bundle deploy

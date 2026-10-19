@@ -1,7 +1,7 @@
 -- Governed tags on sensitive gold columns. The ABAC policies in
--- terraform/abac_policies.tf mask/filter anything carrying these tags.
+-- terraform/modules/neobank_env mask/filter anything carrying these tags.
 -- Runs after build_medallion in neobank_daily; idempotent.
--- Tag keys are defined in terraform/abac_tags.tf.
+-- Tag keys are defined in terraform/shared/governed_tags.tf.
 -- New sensitive gold columns need a line here.
 
 -- pci: mask_pci_columns

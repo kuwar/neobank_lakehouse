@@ -13,10 +13,8 @@ kaggle_data
 .direnv/
 .env
 .DS_Store
-terraform/.terraform/
-terraform/terraform.tfstate
-terraform/terraform.tfstate.backup
-terraform/*.tfvars
-terraform/terraform.tfstate*
-terraform/output.tf
-terraform/tfplan.out
+# Terraform: state, plans and tfvars (secrets) stay local in every root
+terraform/**/.terraform/
+terraform/**/terraform.tfstate*
+terraform/**/*.tfvars
+terraform/**/tfplan.out

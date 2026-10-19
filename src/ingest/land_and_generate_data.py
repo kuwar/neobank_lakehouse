@@ -23,10 +23,10 @@ sample_rows = args.sample_rows
 
 vol_root = f"/Volumes/{catalog}/bronze/{volume}"
 
-# Schemas/volume normally come from Terraform; kept idempotent for fresh catalogs.
-for schema in ("bronze", "silver", "gold"):
-    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
-spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog}.bronze.{volume}")
+# Catalog, schemas and volume are owned by Terraform (terraform/envs/<env>).
+# Fail fast instead of creating them here, which would make the next apply fail.
+if not os.path.isdir(vol_root):
+    raise RuntimeError(f"{vol_root} not found. Run `make tf-apply` for this env first.")
 
 # Volumes are mounted as local paths, so plain os/shutil works.
 for sub in ("transactions", "users", "cards", "mcc", "device_events", "notifications"):

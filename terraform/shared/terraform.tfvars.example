@@ -1,0 +1,2 @@
+warehouse_id                 = "<sql-warehouse-id>"
+email_notification_addresses = ["you@example.com"]

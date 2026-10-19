@@ -1,5 +1,6 @@
-# Tag definitions only. Columns are tagged by the bundle
-# (src/governance/tag_gold_columns.sql) since the pipeline owns the tables.
+# Tag definitions only; tag keys are unique account-wide, so they can't be per env.
+# Columns are tagged by the bundle (src/governance/tag_gold_columns.sql) since the
+# pipeline owns the tables; the ABAC policies per env live in modules/neobank_env.
 locals {
   # key => description; each tag allows "true" / "false"
   governed_tags = {
@@ -19,4 +20,3 @@ resource "databricks_tag_policy" "governed" {
     { name = "false" },
   ]
 }
-

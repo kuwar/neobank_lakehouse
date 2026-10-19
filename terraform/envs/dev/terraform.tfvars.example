@@ -1,0 +1,2 @@
+# Phase 2, after `databricks bundle run neobank_security_functions`
+enable_abac_policies = true

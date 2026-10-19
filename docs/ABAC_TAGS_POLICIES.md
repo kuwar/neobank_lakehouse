@@ -363,6 +363,28 @@ Rationale: masking functions are tightly coupled to table schemas and change
 whenever those schemas do — that's pipeline/data-layer territory, not infra
 territory.
 
+**What this repo does** goes one step further and moves **tag assignment** to the
+bundle too:
+
+```
+terraform/shared (once per workspace):
+  └── databricks_tag_policy              (pii, pci, region_sensitive definitions)
+
+terraform/envs/<env> (once per env, modules/uc_abac_policies):
+  └── databricks_policy_info             (ABAC policies on neobank_<env>.gold)
+
+Bundle (evolves with the data model):
+  ├── src/udf/*.sql                      (job neobank_security_functions)
+  └── src/governance/tag_gold_columns.sql  (task tag_gold_columns in neobank_daily)
+```
+
+`databricks_entity_tag_assignment` needs the column to exist at `terraform apply`,
+but the pipeline creates the tables, so Terraform would have to run again after
+every schema-changing deploy (the last stage in §5.3 Option A). Tagging from the
+bundle, right after `build_medallion`, keeps a new sensitive column and its tag in
+the same PR and removes that second Terraform run. Tag keys are account-wide, which
+is why their definitions live in `terraform/shared` rather than per env.
+
 ---
 
 ## 5. Cross-tool sequencing ("chicken-and-egg")
@@ -409,6 +431,17 @@ stages:
 Steps 1–3 run once (or when logic changes); steps 4–5 repeat on every
 schema-changing deploy.
 
+**This repo's order** (README, "Deploy order") has no repeating Terraform step,
+because tagging is a bundle task:
+
+```
+make tf-shared-apply                              # tag definitions (once per workspace)
+make tf-apply                                     # catalog, schemas, grants (once per env)
+make deploy && databricks bundle run neobank_security_functions   # UDFs
+make tf-apply   # with enable_abac_policies = true  # policies (once per env)
+databricks bundle run neobank_daily               # tables, then tag_gold_columns
+```
+
 **Option B — collapse into a single Terraform graph**
 
 Use `databricks_sql_table` (non-pipeline-managed) for specific gold tables and put
@@ -436,6 +469,7 @@ strict compliance regimes needing protection atomic with table creation.
 | Document PK/FK relationships for catalog/BI | Informational `PRIMARY KEY`/`FOREIGN KEY` in `schema=` (UC pipeline required) |
 | Mask/filter a handful of specific pipeline tables | `@dp` `schema=` `MASK` clause + `row_filter=` |
 | Org-wide PII/PCI governance across many tables | Unity Catalog ABAC (governed tags + `policy_info`) |
-| Version-controlled, auditable governance rules | Terraform (`databricks_tag_policy`, `databricks_entity_tag_assignment`, `databricks_policy_info`) |
+| Version-controlled, auditable governance rules | Terraform (`databricks_tag_policy`, `databricks_policy_info`; `databricks_entity_tag_assignment` when tables aren't pipeline-owned) |
+| Tagging columns of pipeline-owned tables | DAB SQL task after the pipeline (this repo: `tag_gold_columns`) |
 | Masking function logic tied to evolving schemas | DAB / SQL migration script, not Terraform |
-| Cross-tool deploy ordering | Explicit staged CI/CD (function → policy → pipeline → tags) |
+| Cross-tool deploy ordering | Explicit staged order (tag definitions → function → policy → pipeline → tags) |

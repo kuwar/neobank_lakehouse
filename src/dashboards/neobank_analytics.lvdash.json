@@ -1,7 +1,7 @@
 {
   "datasets": [
     {
-      "asset_name": "neobank_dev.gold.mv_transactions",
+      "asset_name": "neobank_dev.metrics_view.mv_transactions",
       "columns": [
         {
           "displayName": "Credit band sort order",
