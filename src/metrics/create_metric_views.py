@@ -1,16 +1,19 @@
 # Metric views over gold: one definition of each KPI for SQL, dashboards and Genie.
+# Views live in their own schema (governed separately); their sources stay in gold.
 import argparse
 
 from neobank_datalake.db_context import get_spark
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--catalog", required=True)
-parser.add_argument("--metrics-view-schema")
+parser.add_argument("--gold-schema", required=True)
+parser.add_argument("--metrics-view-schema", required=True)
 args = parser.parse_args()
 
 spark = get_spark()
 
 catalog = args.catalog
+gold = args.gold_schema
 metrics_view = args.metrics_view_schema
 
 # Transactions and spend
@@ -20,20 +23,22 @@ WITH METRICS
 LANGUAGE YAML
 AS $$
 version: "1.1"
-source: {catalog}.{metrics_view}.fact_transactions
+source: {catalog}.{gold}.fact_transactions
 comment: "Transactions: grains by users and merchants"
 joins:
   - name: user
-    source: {catalog}.{metrics_view}.dim_users
+    source: {catalog}.{gold}.dim_users
     on: source.client_id = user.client_id
-  - name: merchant
-    source: {catalog}.{metrics_view}.dim_merchant
-    on: source.merchant_id = merchant.merchant_id
+  # One row per MCC. dim_merchant is per merchant and city, so joining it would
+  # duplicate transactions.
+  - name: mcc
+    source: {catalog}.{gold}.dim_mcc_code
+    on: source.mcc = mcc.mcc
 fields:
   - name: Transaction date
     expr: transaction_date
   - name: Merchant category
-    expr: merchant.mcc_description
+    expr: mcc.mcc_description
   - name: Income band
     expr: user.income_band
   - name: Credit band
@@ -63,10 +68,10 @@ WITH METRICS
 LANGUAGE YAML
 AS $$
 version: "1.1"
-source: {catalog}.{metrics_view}.fact_notifications
+source: {catalog}.{gold}.fact_notifications
 joins:
   - name: user
-    source: {catalog}.{metrics_view}.dim_users
+    source: {catalog}.{gold}.dim_users
     on: source.client_id = user.client_id
 fields:
   - name: Sent date

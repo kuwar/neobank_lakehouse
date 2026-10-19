@@ -2,7 +2,9 @@ resources:
   dashboards:
     neobank_analytics:
       display_name: "NeoBank-Analytics"
+      # Defaults for SQL datasets only. Metric-view datasets are fully qualified in
+      # the JSON; the prod copy is rendered by `make dashboards` (see databricks.yaml).
       dataset_catalog: ${var.catalog}
-      dataset_schema: ${var.gold_schema}
-      warehouse_id: dfc7731614511a53
-      file_path: ../src/neobank_analytics.lvdash.json
+      dataset_schema: ${var.metrics_view_schema}
+      warehouse_id: ${var.warehouse_id}
+      file_path: ../src/dashboards/neobank_analytics.lvdash.json

@@ -68,6 +68,8 @@ resources:
             parameters:
               - "--catalog"
               - "${var.catalog}"
+              - "--gold-schema"
+              - "${var.gold_schema}"
               - "--metrics-view-schema"
               - "${var.metrics_view_schema}"
 

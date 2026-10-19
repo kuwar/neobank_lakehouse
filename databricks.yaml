@@ -14,7 +14,7 @@ include:
 
 sync:
   exclude:
-    - src/*.lvdash.json
+    - src/dashboards/*.lvdash.json
 
 # Override per target or with --var name=value.
 variables: 
@@ -79,6 +79,11 @@ targets:
       cicd_sp_application_id:
         lookup:
           service_principal: sp-github-cicd
+    resources:
+      dashboards:
+        neobank_analytics:
+          # Rendered with neobank_prod names: make dashboards TARGET_ENV=prod
+          file_path: build/dashboards/neobank_analytics.prod.lvdash.json
     # Prod jobs and pipelines run as the SP.
     run_as:
       service_principal_name: ${var.cicd_sp_application_id}

@@ -18,4 +18,3 @@ terraform/**/.terraform/
 terraform/**/terraform.tfstate*
 terraform/**/*.tfvars
 terraform/**/tfplan.out
-terraform/.pre-split-backup/

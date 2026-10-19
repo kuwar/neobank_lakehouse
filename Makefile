@@ -1,4 +1,4 @@
-.PHONY: install test unit integration clean tf-shared-plan tf-shared-apply tf-plan tf-apply deploy
+.PHONY: install test unit integration clean tf-shared-plan tf-shared-apply tf-plan tf-apply dashboards deploy
 
 install:
 	poetry install
@@ -35,6 +35,17 @@ tf-plan:
 tf-apply:
 	terraform -chdir=$(TF_ENV) apply
 
+# Metric-view datasets need a fully qualified asset_name (dataset_catalog doesn't
+# apply to them), so the dashboard edited in dev is rendered per env. The prod
+# target reads the rendered file (databricks.yaml).
+DASHBOARD_SRC := src/dashboards/neobank_analytics.lvdash.json
+DASHBOARD_OUT := build/dashboards/neobank_analytics.$(TARGET_ENV).lvdash.json
+
+dashboards:
+	@grep -q '"neobank_dev\.' $(DASHBOARD_SRC) || { echo "$(DASHBOARD_SRC): expected neobank_dev.* references"; exit 1; }
+	mkdir -p build/dashboards
+	sed 's/"neobank_dev\./"neobank_$(TARGET_ENV)./g' $(DASHBOARD_SRC) > $(DASHBOARD_OUT)
+
 # Bundle target is DATABRICKS_BUNDLE_TARGET, also derived from TARGET_ENV
-deploy:
+deploy: dashboards
 	databricks bundle deploy -t $(TARGET_ENV)
