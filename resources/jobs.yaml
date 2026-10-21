@@ -82,7 +82,7 @@ resources:
               - ../dist/*.whl
 
     # Mask and row-filter UDFs used by the ABAC policies. Separate job so it can
-    # run before the policies are applied (see README, deploy order).
+    # run before the policies are applied (docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md §5).
     neobank_security_functions:
       name: neobank_security_functions
       tags:

@@ -1,8 +1,8 @@
 # 🏦 Neobank Lakehouse
 
 > An end-to-end, production-shaped analytics platform for a digital-only bank —
-> built entirely as code with **Databricks Asset Bundles**, **Lakeflow Declarative
-> Pipelines**, and the **Unity Catalog** governed semantic layer.
+> built entirely as code with **Declarative Automation Bundles**, **Lakeflow
+> Declarative Pipelines**, **Terraform** and the **Unity Catalog** governed semantic layer.
 
 This project takes raw neobank data — customers, cards, transactions, device
 activity, and notifications — and turns it into a governed, query-able star schema
@@ -38,7 +38,7 @@ and code) is deployed from this repo with Terraform and the bundle.
 
 | Capability | Implemented in |
 |---|---|
-| **Asset Bundles** — jobs, pipelines and dashboards as code, dev/prod targets | `databricks.yaml`, `resources/` |
+| **Bundles** — jobs, pipelines and dashboards as code, dev/prod targets | `databricks.yaml`, `resources/` |
 | **Terraform** — catalog, schemas, grants, identities; shared + per-env layers | `terraform/` |
 | **Scalable incremental ingestion** — Auto Loader (`cloudFiles`) | `src/pipelines/bronze.py` |
 | **Medallion architecture** — bronze → silver → gold | `src/pipelines/` |
@@ -110,7 +110,9 @@ Understanding how the pieces relate is the key to reading this project.
   `run_job_task`, plus control types like `condition_task` and `for_each_task`.
 - **Pipeline** — a *separate* object (a Lakeflow Declarative Pipeline). It holds its
   own graph of tables/materialized views. A job reaches it through one task type:
-  `pipeline_task`.
+  `pipeline_task`. Pipeline code uses `pyspark.pipelines` (`dp`), the successor of
+  the legacy `dlt` module (`src/neobank_datalake/db_context.py` falls back to `dlt`
+  only for older local tooling).
 
 ```
   JOB neobank_daily  (schedule / manual / CLI / file-arrival trigger)
@@ -121,7 +123,7 @@ Understanding how the pieces relate is the key to reading this project.
                                                                      │ triggers
                                                                      ▼
   PIPELINE neobank_medallion
-   └── bronze ──► silver ──► gold   (order auto-inferred from dlt.read() lineage)
+   └── bronze ──► silver ──► gold   (order auto-inferred from dp.read() lineage)
 ```
 
 ### The one insight that clears up the confusion — two kinds of DAG
@@ -131,7 +133,7 @@ There are two dependency graphs here, and they work in **opposite** ways:
 - **The job's task graph is orchestration (imperative).** *You* write the order with
   `depends_on`. No `depends_on` → tasks run in parallel. You are in control.
 - **The pipeline's table graph is dataflow (declarative).** You do **not** write
-  `depends_on`. Because `silver_transactions` calls `dlt.read("bronze_transactions")`,
+  `depends_on`. Because `silver_transactions` calls `dp.read(".../bronze_transactions")`,
   the pipeline *infers* that bronze runs first. You declare *what* the tables are;
   the engine decides *when*.
 
@@ -144,7 +146,7 @@ Orchestration on the outside, dataflow on the inside.
 | **Job** | Schedule (cron), manual run, CLI (`databricks bundle run <job>`), API, file-arrival or table-update trigger, continuous mode, or another job (`run_job_task`). |
 | **Task** | Its `depends_on` — runs when upstream tasks finish (subject to `run_if`). First task(s) start when the job starts. |
 | **Pipeline** | A job's `pipeline_task`, its own schedule, continuous mode, manual run, or CLI (`databricks bundle run <pipeline>`). |
-| **Table in a pipeline** | Never by hand — order comes from `dlt.read()` lineage. |
+| **Table in a pipeline** | Never by hand — order comes from `dp.read()` lineage. |
 
 ### How the link is wired in the bundle
 
@@ -177,20 +179,21 @@ You never hardcode an ID — the reference resolves itself on every deploy.
 
 ```
         dim_users ─────┐              ┌───── dim_merchant
-                       ├── fact_transactions ──┐
-        dim_cards ─────┘                       └── dim_date
+                       ├── fact_transactions ──┼───── dim_mcc_code
+        dim_cards ─────┘                       └───── dim_date
         dim_users ────────── fact_notifications
         dim_users ────────── fact_device_activity
 ```
 
 | Table | Grain (one row per…) | Key columns |
 |---|---|---|
-| `fact_transactions` | transaction | `amount_usd`, `is_declined`, `mcc`, `is_fraud` |
+| `fact_transactions` | transaction | `amount`, `is_declined`, `mcc`, `merchant_id`, `is_fraud` |
 | `fact_notifications` | notification sent | `channel`, `category`, `opened` |
 | `fact_device_activity` | device session/event | `os`, `event_type`, `event_ts` |
 | `dim_users` | customer | `income_band`, `credit_band` |
 | `dim_cards` | card | `card_brand`, `card_type`, `credit_limit` |
-| `dim_merchant` | merchant | `mcc_description`, `merchant_city` |
+| `dim_merchant` | merchant and city | `merchant_id`, `merchant_city`, `merchant_state` |
+| `dim_mcc_code` | merchant category code | `mcc`, `mcc_description` |
 | `dim_date` | calendar day | `year`, `month`, `is_weekend` |
 
 Facts hold the *numbers and foreign keys*; dimensions hold the *descriptive
@@ -232,6 +235,7 @@ neobank_lakehouse/
 │   ├── udf/                           # mask / row-filter UDFs for the ABAC policies
 │   ├── neobank_datalake/              # shared Python package, built as the wheel
 │   └── dashboards/neobank_analytics.lvdash.json  # AI/BI dashboard (dev copy)
+├── docs/                              # see Documentation below
 ├── terraform/                         # see docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md
 │   ├── modules/                       # uc_catalog · uc_abac_policies · neobank_env
 │   ├── shared/                        # workspace-wide objects, one state
@@ -252,7 +256,7 @@ neobank_lakehouse/
 - A **Unity Catalog-enabled** workspace (Databricks Free Edition qualifies).
 - The account groups `data-engineers`, `pci-readers`, `pii-readers`,
   `global-analysts` and the service principal `sp-metabase-reader`, created in the
-  UI (Terraform looks them up; see [Free Edition notes](#free-edition--serverless-notes)).
+  UI (Terraform looks them up; see [docs/WORKSPACE_SETUP.md](docs/WORKSPACE_SETUP.md)).
 - **Kaggle credentials** for the download step — set `KAGGLE_USERNAME` /
   `KAGGLE_KEY`, or upload the CSVs to the volume manually (the ingest script
   supports both paths).
@@ -319,7 +323,7 @@ illustrates):
    fast if the volume doesn't exist yet (run `make tf-apply` first).
 2. **`build_medallion`** (`pipeline_task`) — because it `depends_on` `land_data`, it
    waits for step 1, then *triggers the entire pipeline*. Inside the pipeline, bronze
-   → silver → gold order themselves from `dlt.read()` lineage (no `depends_on`).
+   → silver → gold order themselves from `dp.read()` lineage (no `depends_on`).
 3. **`tag_gold_columns`** (`sql_task`) — tags the sensitive gold columns, so the
    ABAC policies mask / filter them straight away.
 4. **`build_metrics_views`** (`spark_python_task`) — runs in parallel with step 3 and
@@ -407,7 +411,7 @@ Terraform inputs, and how the `dev` and `prod` targets differ, are in
   compute (never deletes data) if exceeded.
 - **Groups are created and filled by hand** in Settings → Identity and access →
   Groups; Free Edition has no account API. See
-  [docs/DATABRICKS_ACCOUNT_HIERARCHY.md](docs/DATABRICKS_ACCOUNT_HIERARCHY.md) §5.
+  [docs/WORKSPACE_SETUP.md](docs/WORKSPACE_SETUP.md) §4.
 - **Catalogs are created with SQL**, not the API; Terraform imports them.
 
 ---
@@ -417,7 +421,7 @@ Terraform inputs, and how the `dev` and `prod` targets differ, are in
 | Symptom | Fix |
 |---|---|
 | `error downloading Terraform … hashicorp.com` | Deploy locally, or run `databricks bundle deployment migrate`. |
-| Auth failures | Regenerate token, re-run `databricks configure`, ensure host has no trailing slash. |
+| Auth failures | Re-run `databricks auth login --profile free-edition-workspace`; check the host has no trailing slash. |
 | `Cluster not found` / node type errors | Remove classic cluster config; the pipeline must be serverless. |
 | Kaggle download fails | Set `KAGGLE_USERNAME`/`KAGGLE_KEY`, or upload CSVs to the volume manually and re-run. |
 | Metric-view DDL rejected | `WITH METRICS LANGUAGE YAML` is a newer feature; verify syntax against the current business-semantics docs. |
@@ -435,7 +439,8 @@ Great next exercises, roughly in order of impact:
 
 - **Real fraud KPI** — join `train_fraud_labels.json` into `fact_transactions` so
   `Fraud rate` reflects true labels, then build a fraud dashboard.
-- **SCD Type 2 history** on `dim_users` using `dlt.apply_changes` (AUTO CDC) to track
+- **SCD Type 2 history** on `dim_users` using AUTO CDC (`dp.create_auto_cdc_flow`,
+  formerly `dlt.apply_changes`) to track
   how customer attributes change over time.
 - **Engagement stickiness** — add a DAU/MAU window measure to `mv_engagement`.
 - **Materialized metric views** for faster dashboards.
@@ -451,24 +456,23 @@ Each doc answers one question:
 
 | Doc | Read it to… |
 |---|---|
-| [MULTI_ENVIRONMENT_DEPLOYMENTS.md](docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md) | set up and deploy dev/prod: Terraform layers, `TARGET_ENV`, deploy order, CI/CD |
-| [ABAC_TAGS_POLICIES.md](docs/ABAC_TAGS_POLICIES.md) | understand the governance design: expectations, masks, governed tags, ABAC, cross-tool ordering |
-| [DATABRICKS_ACCOUNT_HIERARCHY.md](docs/DATABRICKS_ACCOUNT_HIERARCHY.md) | set up the groups and service principals this project expects (Free Edition) |
-| [DATABRICKS_PERMISSIONS.md](docs/DATABRICKS_PERMISSIONS.md) | look up any Databricks permission: account, workspace and Unity Catalog reference |
-| [databricks-bundles-full-tutorial.md](docs/databricks-bundles-full-tutorial.md) | learn Asset Bundles from scratch: CLI, `databricks.yml`, tutorials |
-| [databricks-bundle-file-references-reference.md](docs/databricks-bundle-file-references-reference.md) | reference files correctly from job tasks and pipeline libraries |
+| [WORKSPACE_SETUP.md](docs/WORKSPACE_SETUP.md) | create the groups, service principals and catalogs this project expects (Free Edition), and why groups must be account-level |
+| [MULTI_ENVIRONMENT_DEPLOYMENTS.md](docs/MULTI_ENVIRONMENT_DEPLOYMENTS.md) | set up and deploy dev/prod: Terraform layers, `TARGET_ENV`, ownership, deploy order, CI/CD |
+| [DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md) | understand the governance design: expectations, masks, governed tags, ABAC, cross-tool ordering and prerequisites |
+| [PERMISSIONS_REFERENCE.md](docs/PERMISSIONS_REFERENCE.md) | look up any Databricks permission: account, workspace, Unity Catalog, bundles and Terraform |
+| [BUNDLES_GUIDE.md](docs/BUNDLES_GUIDE.md) | learn bundles from scratch: CLI, `databricks.yml`, tutorials, referencing source files from tasks and pipelines |
 
 ---
 
 ## References
 
-- Databricks Asset Bundles: https://docs.databricks.com/aws/en/dev-tools/bundles/
+- Declarative Automation Bundles: https://docs.databricks.com/aws/en/dev-tools/bundles/
 - Bundle CLI commands: https://docs.databricks.com/aws/en/dev-tools/cli/bundle-commands
-- Lakeflow Declarative Pipelines: https://docs.databricks.com/aws/en/dlt/
+- Lakeflow Declarative Pipelines: https://docs.databricks.com/aws/en/ldp/
 - Unity Catalog business semantics / metric views: https://docs.databricks.com/aws/en/business-semantics/
 - Dataset: https://www.kaggle.com/datasets/computingvictor/transactions-fraud-datasets
 
 ---
 
-*Built as a learning project to showcase the Databricks Lakehouse and Asset Bundles.
+*Built as a learning project to showcase the Databricks Lakehouse and bundles.
 Not affiliated with any real financial institution; all data is public or synthetic.*

@@ -1,9 +1,13 @@
-# ABAC, Tags & Policies — Gold Layer Governance
+# Data Governance: Quality, Masks, Tags and ABAC
 
-This document covers how to enforce data quality constraints, column masking, and
-Attribute-Based Access Control (ABAC) on gold-layer tables built with **Lakeflow
-Declarative Pipelines**, and how to manage tags/policies/masking functions with
-**Terraform**.
+How data quality, column masks, row filters and attribute-based access control
+(ABAC) work on gold tables built with **Lakeflow Declarative Pipelines**, which
+tool should own each piece, what this repo does, and the order things must be
+created in.
+
+Related docs: [WORKSPACE_SETUP.md](WORKSPACE_SETUP.md) covers the account groups
+the policies name; [MULTI_ENVIRONMENT_DEPLOYMENTS.md §5](MULTI_ENVIRONMENT_DEPLOYMENTS.md#5-first-time-setup-of-an-environment)
+has the exact commands.
 
 ---
 
@@ -196,10 +200,15 @@ matching object, including pipeline-created tables.
 
 ### 3.1 Governed tags
 
-```sql
-CREATE GOVERNED TAG pii DESCRIPTION 'Contains personal data' VALUES ('true', 'false');
-CREATE GOVERNED TAG pci DESCRIPTION 'Contains cardholder data' VALUES ('true');
-```
+A governed tag is an account-level tag key with a fixed set of allowed values
+and its own permissions. Create it in Catalog Explorer (**Govern → Governed
+tags**), through the tag policies API, or with Terraform `databricks_tag_policy`
+(this repo: `terraform/shared/governed_tags.tf`).
+
+Assigning a governed tag needs **two** permissions: `APPLY TAG` on the object,
+and **ASSIGN** on the tag itself. The tag's creator holds MANAGE; everyone else
+has to be given ASSIGN (in Terraform, `databricks_access_control_rule_set` with
+`roles/tagPolicy.assigner`).
 
 ### 3.2 Tagging columns
 
@@ -228,7 +237,7 @@ CREATE POLICY mask_pci_columns
 ON SCHEMA gold
 COLUMN MASK gold.mask_card_number
 TO `account users`
-EXCEPT `pci_readers`
+EXCEPT `pci-readers`
 FOR TABLES
 MATCH COLUMNS hasTag('pci') AS card_col
 ON COLUMN card_col;
@@ -283,34 +292,31 @@ resource "databricks_entity_tag_assignment" "address_pii" {
   depends_on  = [databricks_tag_policy.pii]
 }
 
-# ABAC policy
+# ABAC policy (provider ~> 1.127 syntax; nested settings are attributes)
 resource "databricks_policy_info" "mask_pci_columns" {
   name                  = "mask_pci_columns"
   on_securable_type     = "SCHEMA"
-  on_securable_fullname = "gold"
+  on_securable_fullname = "main.gold"
   for_securable_type    = "TABLE"
   policy_type           = "POLICY_TYPE_COLUMN_MASK"
 
   to_principals     = ["account users"]
-  except_principals = ["pci_readers"]
+  except_principals = ["pci-readers"]
 
-  match_columns {
+  match_columns = [{
     condition = "hasTag('pci')"
-    alias     = "col"
-  }
+    alias     = "pci_col"
+  }]
 
-  column_mask {
-    function_name = "gold.mask_generic_pci"
-    on_column     = "col"
+  column_mask = {
+    function_name = "main.gold.mask_card_number"
+    on_column     = "pci_col"
   }
-
-  depends_on = [null_resource.mask_functions] # see 4.2
 }
 ```
 
-> `databricks_policy_info` attribute names are still evolving as ABAC is a newer GA
-> feature — verify the exact block structure against current provider docs before
-> implementing.
+The working version, for both masks and row filters, is
+`terraform/modules/uc_abac_policies/main.tf`.
 
 ### 4.2 Masking functions: no native resource — workarounds
 
@@ -338,9 +344,9 @@ Caveats: not idempotent-aware like a native resource (Terraform can't diff the S
 body, only re-run on trigger change); manual edits in Catalog Explorer won't show up
 in `plan`.
 
-**Option B — Databricks Asset Bundles (DAB) own the function DDL** *(recommended)*
+**Option B — the bundle owns the function DDL** *(recommended)*
 
-- DAB deploys the masking function SQL (via a deploy-triggered job task) alongside
+- The bundle deploys the masking function SQL (via a deploy-triggered job task) alongside
   the pipeline.
 - Terraform owns tags, tag assignments, and `policy_info` — referencing the function
   by fully-qualified name only.
@@ -355,7 +361,7 @@ Terraform (governance-as-code, changes rarely):
   ├── databricks_entity_tag_assignment   (tag columns)
   └── databricks_policy_info             (ABAC policies)
 
-DAB / SQL migration script (data-layer-as-code, evolves with schema):
+Bundle / SQL migration script (data-layer-as-code, evolves with schema):
   └── CREATE OR REPLACE FUNCTION gold.mask_*   (masking logic)
 ```
 
@@ -368,7 +374,8 @@ bundle too:
 
 ```
 terraform/shared (once per workspace):
-  └── databricks_tag_policy              (pii, pci, region_sensitive definitions)
+  ├── databricks_tag_policy              (pii, pci, region_sensitive definitions)
+  └── databricks_access_control_rule_set (ASSIGN on each tag for sp-github-cicd)
 
 terraform/envs/<env> (once per env, modules/uc_abac_policies):
   └── databricks_policy_info             (ABAC policies on neobank_<env>.gold)
@@ -383,7 +390,8 @@ but the pipeline creates the tables, so Terraform would have to run again after
 every schema-changing deploy (the last stage in §5.3 Option A). Tagging from the
 bundle, right after `build_medallion`, keeps a new sensitive column and its tag in
 the same PR and removes that second Terraform run. Tag keys are account-wide, which
-is why their definitions live in `terraform/shared` rather than per env (layers:
+is why their definitions live in `terraform/shared` rather than per env. Prod
+tagging runs as `sp-github-cicd`, so the SP gets ASSIGN on each tag there (layers:
 [MULTI_ENVIRONMENT_DEPLOYMENTS.md §1](MULTI_ENVIRONMENT_DEPLOYMENTS.md#1-the-model-one-workspace-three-layers)).
 
 ---
@@ -413,7 +421,7 @@ independent chains, not a circular one.
 
 ### 5.2 Where the real friction is
 
-Terraform and DAB don't share one `apply` graph — ordering across tools must be
+Terraform and the bundle don't share one `apply` graph — ordering across tools must be
 enforced externally (CI/CD), since neither tool can see the other's state.
 
 ### 5.3 Fixes
@@ -453,6 +461,47 @@ the tag lands. Trade-off: a window between table creation and classification run
 where the column is untagged and unprotected — acceptable for many orgs, not for
 strict compliance regimes needing protection atomic with table creation.
 
+### 5.4 Prerequisites checklist for this repo
+
+Row filters and column masks (ABAC `databricks_policy_info`, or
+`ALTER TABLE ... SET ROW FILTER / SET MASK`) depend on objects at **three
+layers**. Each must exist, and be the right kind, before the policy is created.
+
+```
+Account   ── account groups: pci-readers, pii-readers, global-analysts, data-engineers  (UI)
+   │
+Metastore ── catalog neobank_<env>, schema gold               (terraform/envs/<env>)
+   │        ── governed tags: pci, pii, region_sensitive      (terraform/shared, databricks_tag_policy)
+   │        ── UDFs: mask_card_number, mask_address, filter_by_region   (bundle, src/udf/)
+   │        ── tables: dim_cards, dim_users, dim_merchant      (bundle, pipeline)
+   │        ── column tags on the tables                       (bundle, src/governance/tag_gold_columns.sql)
+   │
+Policy    ── databricks_policy_info (ROW_FILTER / COLUMN_MASK) (terraform/envs/<env>, uc_abac_policies)
+```
+
+| # | Requirement | Why | How |
+|---|---|---|---|
+| 1 | Every group named in `to_principals`, `except_principals`, grants and `is_account_group_member()` is an **account group** | UC only resolves account identities | [WORKSPACE_SETUP.md §4](WORKSPACE_SETUP.md#4-how-this-repo-handles-it) |
+| 2 | The group exists **before** the policy | name resolution happens at create time | reference it (`data.databricks_group.x.display_name`), not a string literal (done in `modules/neobank_env`) |
+| 3 | Masking / filter UDFs exist in UC | the policy points at a function by full name | run job `neobank_security_functions` before `enable_abac_policies = true` (§5.1) |
+| 4 | Governed tag policies exist before tag assignment, and the tagging identity has ASSIGN | assignment checks the tag policy and its permissions | `terraform/shared` (tag policies + rule sets) is applied before the bundle runs `tag_gold_columns` |
+| 5 | Tagged tables / columns exist | tags attach to real columns | `tag_gold_columns` runs after `build_medallion` in `neobank_daily` |
+| 6 | UDF parameter type matches the column type | `mask_card_number(BIGINT)` on a `STRING` column fails | keep `src/udf` signatures in sync with gold schemas |
+| 7 | Policy owners / creators have `MANAGE` on the securable | creating ABAC policies is privileged | catalog owner, or explicit grant |
+| 8 | Readers still need ordinary grants | ABAC narrows access, it does not grant it | `USE_CATALOG`, `USE_SCHEMA`, `SELECT` via `databricks_grants` (`catalog_grants` / `schema_grants` in `modules/neobank_env`) |
+
+#### Use references, not strings, for principals
+
+```hcl
+# ❌ no dependency — Terraform may create the policy before the group exists
+except_principals = ["pci_readers"]
+
+# ✅ dependency + fails early at plan if the group is missing
+except_principals = [data.databricks_group.pci_readers.display_name]
+```
+
+`"account users"` is a built-in account group and can stay a string.
+
 ---
 
 ## 6. Summary decision guide
@@ -464,6 +513,6 @@ strict compliance regimes needing protection atomic with table creation.
 | Mask/filter a handful of specific pipeline tables | `@dp` `schema=` `MASK` clause + `row_filter=` |
 | Org-wide PII/PCI governance across many tables | Unity Catalog ABAC (governed tags + `policy_info`) |
 | Version-controlled, auditable governance rules | Terraform (`databricks_tag_policy`, `databricks_policy_info`; `databricks_entity_tag_assignment` when tables aren't pipeline-owned) |
-| Tagging columns of pipeline-owned tables | DAB SQL task after the pipeline (this repo: `tag_gold_columns`) |
-| Masking function logic tied to evolving schemas | DAB / SQL migration script, not Terraform |
+| Tagging columns of pipeline-owned tables | Bundle SQL task after the pipeline (this repo: `tag_gold_columns`) |
+| Masking function logic tied to evolving schemas | Bundle / SQL migration script, not Terraform |
 | Cross-tool deploy ordering | Explicit staged order (tag definitions → function → policy → pipeline → tags) |

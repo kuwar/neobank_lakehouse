@@ -1,16 +1,20 @@
-# Databricks Asset Bundles — The Complete, Corrected Tutorial (Free Edition, 2026)
+# Bundles Guide
 
-> **This supersedes my earlier notes.** The one correction that matters most:
-> **notebooks and `.py` files are NOT "artifacts."** Artifacts means *built* things only
-> (wheels, JARs). Source code lives in `src/` and is *synced*, not built. That single
-> mix-up is what made the concept feel murky — it's fixed throughout this document.
+Learning guide and reference for Declarative Automation Bundles on Free
+Edition: the CLI, `databricks.yml` (`databricks.yaml` also works; this repo uses
+it), hands-on tutorials, and how to reference source files from jobs and pipelines.
+It's generic; how *this* repo deploys is in
+[MULTI_ENVIRONMENT_DEPLOYMENTS.md](MULTI_ENVIRONMENT_DEPLOYMENTS.md).
+
+> **Notebooks and `.py` files are not "artifacts."** Artifacts are *built* things
+> only (wheels, JARs). Source code lives in `src/` and is *synced*, not built.
 
 ---
 
 ## 0. Read this first: can a mistake cost me money?
 
-**No — not on Free Edition.** The Databricks Free Edition (which replaced the old Community
-Edition on Jan 1, 2026) is **free forever**. There is no credit card and no bill.
+**No — not on Free Edition.** Databricks Free Edition is **free forever**. There is
+no credit card and no bill.
 
 What a mistake *can* cost you is your **daily compute quota**. Free Edition runs on serverless
 compute under a fair-usage policy: if you burn through the quota, your compute is paused for the
@@ -21,10 +25,7 @@ So "expensive mistake" here means **wasting quota on a bad run**, or worse, **le
 that would cost real money on a paid workspace later**. Everything in this tutorial is built
 around a workflow that stays safe in both worlds:
 
-```
-  validate  →  plan  →  deploy -t dev  →  run  →  destroy
-   (free)     (free)      (free)      (COMPUTE)   (free)
-```
+![init → validate → plan → deploy → run → summary → destroy; only run uses compute](images/bundle-command-flow.png)
 
 Only `run` spends compute. `validate`, `plan`, `deploy`, `summary`, and `destroy` do not.
 Get in the habit of validating and planning *every* time before you deploy, and always working
@@ -32,38 +33,12 @@ in a `dev` target first. That habit is your entire cost-safety strategy.
 
 ---
 
-## 1. Naming: "Asset Bundles" vs "Declarative Automation Bundles"
-
-In March 2026 Databricks **renamed** *Databricks Asset Bundles* to *Declarative Automation
-Bundles*. Nothing about how you use them changed:
-
-- the config file is still `databricks.yml`
-- the CLI command group is still `databricks bundle ...`
-- everyone still says "DABs"
-
-If a doc, blog post, or tutorial says either name, it's the same thing. Don't let the two names
-confuse you.
-
----
-
-## 2. The mental model: four blocks, each answers ONE question
+## 1. The mental model: four blocks, each answers ONE question
 
 A bundle is a project folder described as code. It has four YAML blocks plus your source files.
 Here is the whole thing at a glance:
 
-```
-  Bundle project folder (in Git)
-  ┌───────────────────────────────────────────────┐
-  │  databricks.yml                                │
-  │  ┌──────────────────────────────────────────┐ │
-  │  │ bundle:     the project's identity (name) │ │
-  │  │ artifacts:  BUILD wheels/JARs  (optional) │ │        deploy
-  │  │ resources:  the OBJECTS to create  ◄──────┼─┼───────────────►  Databricks
-  │  │ targets:    WHERE to deploy (dev / prod)  │ │                  workspace
-  │  └──────────────────────────────────────────┘ │              (resources run here)
-  │  src/   notebooks & .py  —  SYNCED, not built  │
-  └───────────────────────────────────────────────┘
-```
+![databricks.yml holds bundle, artifacts, resources and targets; src/ is synced; deploy sends it to the workspace](images/bundle-anatomy.png)
 
 | Block (YAML key) | The one question it answers | What goes in it |
 |---|---|---|
@@ -74,12 +49,16 @@ Here is the whole thing at a glance:
 | `src/` (not a block) | *What **code** runs?* | notebooks and `.py` files — just sit in the folder, referenced by resources. |
 
 **How they connect:** artifacts get *built* and source files get *synced*; `resources` point at
-both (a task references `notebook_path: ./src/x.py` or a built `whl`); `targets` decide which
+both (a task references `notebook_path: ../src/x.py` or a built `whl`); `targets` decide which
 workspace it all lands in and with what overrides.
+
+Where things land after `deploy`:
+
+![src/ is synced to files/, built wheels go to artifacts/.internal/, deployment state to state/](images/bundle-deploy-layout.png)
 
 ---
 
-## 3. Free Edition constraints (memorize these)
+## 2. Free Edition constraints (memorize these)
 
 | Constraint | What it means for your bundle |
 |---|---|
@@ -92,7 +71,7 @@ workspace it all lands in and with what overrides.
 
 ---
 
-## 4. Install and authenticate the CLI
+## 3. Install and authenticate the CLI
 
 ```bash
 # Install (pick your platform)
@@ -104,26 +83,21 @@ curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.s
 databricks --version
 ```
 
-Authenticate to your Free Edition workspace:
-
-1. In the workspace UI: **Settings → Developer → Access tokens → Manage → Generate new token**. Copy it.
-2. Configure a profile:
+Authenticate to your Free Edition workspace with OAuth (browser login; no token to
+copy or rotate):
 
 ```bash
-databricks configure
-#   Databricks host: https://<your-workspace>.cloud.databricks.com   (copy from browser, no trailing slash)
-#   Personal Access Token: <paste>
+databricks auth login --host https://<your-workspace>.cloud.databricks.com --profile <name>
+#   host: copy from the browser, no trailing slash
+databricks current-user me --profile <name>      # test it
 ```
 
-3. Test it:
-
-```bash
-databricks current-user me
-```
+Personal access tokens (`databricks configure`) still work, but OAuth is the
+recommended method for interactive use.
 
 ---
 
-## 5. Full command reference (with examples)
+## 4. Full command reference (with examples)
 
 Every command is `databricks bundle <command>`. Add `-h` to any command to see its flags.
 
@@ -154,7 +128,7 @@ databricks bundle plan
 # create pipelines.my_bundle_pipeline
 ```
 
-The "terraform plan" of DABs: shows create/update/delete actions **without changing anything**.
+The "terraform plan" of bundles: shows create/update/delete actions **without changing anything**.
 Use `--select my_job` to scope it to one resource.
 
 ### `deploy` — push artifacts + resources to the workspace *(no compute run)*
@@ -282,7 +256,7 @@ resources with a `lifecycle` setting if you don't want them destroyable.
 
 ---
 
-## 6. Anatomy of a real `databricks.yml` (fully annotated)
+## 5. Anatomy of a real `databricks.yml` (fully annotated)
 
 ```yaml
 # BLOCK 1 — identity
@@ -343,7 +317,7 @@ iterate without ever touching a production object.
 
 ---
 
-## 7. Tutorials (hands-on, Free Edition, run locally)
+## 6. Tutorials (hands-on, Free Edition, run locally)
 
 Each builds on the last. Run everything from your **local terminal**.
 
@@ -438,9 +412,9 @@ resources:
 `src/pipeline.py`:
 
 ```python
-import dlt
+from pyspark import pipelines as dp   # replaces the legacy `import dlt`
 
-@dlt.table
+@dp.materialized_view
 def sample_table():
     return spark.range(10).withColumnRenamed("id", "n")
 ```
@@ -554,6 +528,173 @@ the task. On Free Edition serverless, if the classic library install is awkward,
 
 ---
 
+## 7. Referencing source files from jobs and pipelines
+
+The most common "why won't my `.py` run" bug: in a **job**, `libraries` is for
+**dependencies to install**, not your source. Source goes in the **task-type field**.
+And a `.py` can be *either* a notebook *or* a script, which decides the field.
+(Source: the bundle `job-task-types` and `library-dependencies` docs.)
+
+### 7.1 The mental model
+
+```
+JOB TASK
+ ├─ <task_type>: …        ← your SOURCE goes here (notebook_path / python_file / …)
+ └─ libraries: […]        ← DEPENDENCIES to install (whl / jar / pypi / …). NOT source.
+
+PIPELINE (Lakeflow Declarative Pipelines)
+ └─ libraries: […]        ← your SOURCE goes here (notebook: / file: / glob:)
+```
+
+Same word, `libraries`, opposite meaning in the two resources.
+
+
+### 7.2 The `.py` fork (most common mistake)
+
+A `.py` file can be two different things:
+
+| The file is… | How it looks | Reference it with |
+|---|---|---|
+| A **Databricks notebook** in source format | First line `# Databricks notebook source`; cells split by `# COMMAND ----------` | `notebook_task.notebook_path` |
+| A **plain Python script** | Ordinary `.py`, no notebook header | `spark_python_task.python_file` |
+
+Pointing the wrong field at the file fails. Match the field to what the file *is*.
+
+
+### 7.3 Correct field per file type — JOB tasks
+
+| What you have | Task type key | Path/reference field | Notes |
+|---|---|---|---|
+| Notebook (`.ipynb`, or `.py`/`.sql`/`.r`/`.scala` in notebook source format) | `notebook_task` | `notebook_path` | Path required; absolute in workspace, relative in repo |
+| Plain Python script (`.py`) | `spark_python_task` | `python_file` | Does **not** support dynamic value references |
+| Packaged Python wheel | `python_wheel_task` | `package_name` + `entry_point` | The wheel goes in `libraries: - whl:` |
+| JAR (Java/Scala) | `spark_jar_task` | `main_class_name` | The jar goes in `libraries: - jar:` |
+| SQL file (`.sql`) | `sql_task` | `file: { path: … }` | Also `query:`/`alert:`/`dashboard:` variants |
+| dbt project | `dbt_task` | `project_directory` + `commands` | dbt adapter via `libraries: - pypi:` |
+| A pipeline | `pipeline_task` | `pipeline_id` | Use `${resources.pipelines.<name>.id}` |
+| Another job | `run_job_task` | `job_id` | Use `${resources.jobs.<name>.id}` |
+| Dashboard refresh | `dashboard_task` | `dashboard_id` | |
+
+#### Examples
+```yaml
+resources:
+  jobs:
+    my_job:
+      tasks:
+
+        # Notebook (.py in notebook source format, or .ipynb)
+        - task_key: nb
+          notebook_task:
+            notebook_path: ../src/my_notebook.py     # .ipynb also fine
+            # source: WORKSPACE                       # default; leave as-is
+            base_parameters:
+              env: ${bundle.target}
+
+        # Plain Python script
+        - task_key: script
+          spark_python_task:
+            python_file: ../src/my_script.py
+            parameters: ["--date", "{{job.start_time.iso_date}}"]
+
+        # Python wheel (packaged code)
+        - task_key: wheel
+          python_wheel_task:
+            package_name: my_package
+            entry_point: run
+          libraries:
+            - whl: ../dist/my_package-*.whl
+
+        # JAR
+        - task_key: jar
+          spark_jar_task:
+            main_class_name: com.example.Main
+          libraries:
+            - jar: /Volumes/main/default/vol/app-0.1.0.jar
+
+        # SQL file
+        - task_key: sql
+          sql_task:
+            warehouse_id: 1a111111a1111aa1
+            file:
+              path: ../src/query.sql
+              source: WORKSPACE
+```
+
+
+### 7.4 What `libraries` accepts (JOB task) — dependencies only
+
+`libraries` installs packages on the cluster. Valid entry keys:
+
+| Key | For | Example |
+|---|---|---|
+| `whl` | Python wheel file | `- whl: ../dist/pkg-*.whl` |
+| `jar` | Java/Scala JAR | `- jar: /Volumes/…/app.jar` |
+| `pypi` | PyPI package | `- pypi: { package: "requests==2.31.0" }` |
+| `maven` | Maven coordinates | `- maven: { coordinates: "com.foo:bar:1.0" }` |
+| `cran` | R package | `- cran: { package: "forecast" }` |
+| `egg` | Python egg (legacy) | `- egg: ../dist/pkg.egg` |
+| `requirements` | requirements.txt | `- requirements: /Workspace/${workspace.file_path}/requirements.txt` |
+
+❌ There is **no** `notebook:`, `file:`, or `python_file:` key under a job task's `libraries`.
+Your `.py`/`.ipynb` source never goes here.
+
+
+### 7.5 PIPELINE libraries — source DOES go here
+
+In a `pipelines` resource, `libraries` is where you list source:
+
+```yaml
+resources:
+  pipelines:
+    my_pipeline:
+      name: my_pipeline
+      catalog: main
+      schema: analytics
+      libraries:
+        - notebook:
+            path: ../src/bronze.py      # notebook-format .py
+        - notebook:
+            path: ../src/silver.ipynb
+        - file:
+            path: ../src/helpers.py     # plain .py imported as a module
+        - glob:
+            include: ../src/transforms/**
+```
+
+| Key | For |
+|---|---|
+| `notebook: { path: … }` | A notebook (source-format `.py` or `.ipynb`) |
+| `file: { path: … }` | A plain source file |
+| `glob: { include: … }` | Multiple files by pattern |
+
+
+### 7.6 Path & `source` rules (both jobs and pipelines)
+
+- **Relative paths** are relative to the **YAML file that declares the task**, e.g. `../src/foo.py`.
+  Files are synced to the workspace on `bundle deploy`.
+- **Absolute** workspace paths begin with `/Workspace/…` (or `/Users/…`).
+- The `source` field (`notebook_task`, `spark_python_task`, `sql_task.file`) can be `WORKSPACE`
+  (default) or `GIT`. **Prefer `WORKSPACE` for bundles.** `source: GIT` (and job `git_source`) is
+  *not recommended* for bundles because local relative paths may not match repo content — instead,
+  put your bundle project inside the cloned repo so sources resolve from the workspace.
+- `spark_python_task.python_file` does **not** support dynamic value references — keep it a literal
+  path (bundle `${...}` substitutions still resolve at deploy, but avoid `{{...}}` here).
+
+
+### 7.7 Quick troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `.py` "not found" / not treated as code | Put source under `libraries:` in a **job** | Move it to `notebook_task.notebook_path` or `spark_python_task.python_file` |
+| Notebook magics / `dbutils` fail in a script task | Notebook-format `.py` under `spark_python_task` | Use `notebook_task`, or strip notebook headers to make it a real script |
+| Plain script "runs as one cell" oddly | Plain `.py` under `notebook_task` | Use `spark_python_task.python_file` |
+| Import of a helper `.py` fails | Helper listed as a task, not on the path | In pipelines use `libraries: - file:`; in jobs, package it (wheel) or add its dir to `sys.path` |
+| Deploy points at stale repo content | `source: GIT` / `git_source` | Switch to `WORKSPACE`; develop inside the cloned repo |
+```
+```
+
+---
+
 ## 8. Safety checklist — avoid wasting quota (and money later)
 
 ```
@@ -584,7 +725,7 @@ workspace from running up a bill. Learning them now means you never learn the ex
 | Symptom | Cause / Fix |
 |---|---|
 | `error downloading Terraform ... releases.hashicorp.com` | Deploying inside serverless. Deploy from your local machine, or run `databricks bundle deployment migrate`. |
-| Auth fails in CLI / VS Code | Regenerate PAT (**Settings → Developer**), re-run `databricks configure`, ensure host has no trailing slash, then `databricks current-user me`. |
+| Auth fails in CLI / VS Code | Re-run `databricks auth login --profile <name>`, check the host has no trailing slash, then `databricks current-user me`. |
 | `Cluster not found` / node type errors | You defined a classic cluster. Remove it; use serverless (`serverless: true` for pipelines). |
 | Wheel/library install fails on serverless | Use `%pip install` in the notebook or an `environments` spec. |
 | Deploy created a duplicate instead of updating | Resource wasn't bound. Use `generate --bind` or `bundle deployment bind`. |
@@ -598,7 +739,7 @@ workspace from running up a bill. Learning them now means you never learn the ex
 ```bash
 # Setup
 databricks --version
-databricks configure && databricks current-user me
+databricks auth login --host <url> --profile <name> && databricks current-user me
 
 # Safe loop (repeat validate → plan → deploy → run)
 databricks bundle init default-python      # say YES to serverless
@@ -624,10 +765,12 @@ databricks bundle deployment migrate       # Terraform-free engine
 
 ---
 
-### Official references
+## 11. Official references
 - What are Declarative Automation Bundles: `https://docs.databricks.com/aws/en/dev-tools/bundles/`
 - `bundle` command group: `https://docs.databricks.com/aws/en/dev-tools/cli/bundle-commands`
 - Configuration reference: `https://docs.databricks.com/aws/en/dev-tools/bundles/reference`
 - Resources reference: `https://docs.databricks.com/aws/en/dev-tools/bundles/resources`
 - Free Edition limitations: `https://docs.databricks.com/aws/en/getting-started/free-edition-limitations`
 - Build a Python wheel with bundles: `https://docs.databricks.com/aws/en/dev-tools/bundles/python-wheel`
+- Job task types: `https://docs.databricks.com/aws/en/dev-tools/bundles/job-task-types`
+- Library dependencies: `https://docs.databricks.com/aws/en/dev-tools/bundles/library-dependencies`
