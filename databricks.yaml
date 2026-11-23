@@ -76,6 +76,21 @@ targets:
       host: https://dbc-31fcc0ce-44e6.cloud.databricks.com
       # SP home: one copy regardless of who deploys. /Workspace/Shared is writable by all users.
       root_path: /Workspace/Users/${var.cicd_sp_application_id}/.bundle/${bundle.name}/${bundle.target}
+    # Prod runs only src/ (resources/ is read locally at deploy). Appended to the top-level excludes.
+    sync:
+      exclude:
+        - terraform/**
+        - tests/**
+        - docs/**
+        - fixtures/**
+        - .github/**
+        - .vscode/**
+        - .envrc
+        - Makefile
+        - poetry.lock
+        - uv.lock
+        - pytest.ini
+        - "*.md"
     variables:
       catalog: neobank_prod
       # CI/CD SP (terraform/shared/service_principals.tf), resolved to its application ID.

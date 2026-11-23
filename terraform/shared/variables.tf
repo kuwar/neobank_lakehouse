@@ -44,3 +44,9 @@ variable "prod_reviewers" {
   type        = list(string)
   default     = []
 }
+
+variable "kaggle_api_token" {
+  description = "Kaggle API token stored in the kaggle secret scope. Comes from KAGGLE_API_TOKEN in .env."
+  type        = string
+  sensitive   = true
+}
