@@ -37,6 +37,9 @@ variables:
   volume:
     description: Volume that holds landed raw files
     default: raw
+  kaggle_secret_scope:
+    description: Workspace level secret scope
+    default: kaggle
   # Kept small for the Free Edition quota.
   sample_rows:
     description: Max transactions to load (0 = all ~13M)

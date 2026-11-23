@@ -1,6 +1,12 @@
 # Lands raw files in the bronze volume for Auto Loader:
 #   - Kaggle transactions/users/cards/MCC dataset
 #   - synthetic device and notification events for existing client_ids
+#
+# Kaggle credentials come from a Databricks secret scope (default: "kaggle").
+# Supported keys in the scope:
+#   - api_token            -> new-style Kaggle API token (KAGGLE_API_TOKEN)
+#   - username + key       -> legacy kaggle.json credentials (KAGGLE_USERNAME / KAGGLE_KEY)
+# If KAGGLE_* env vars are already set (e.g. running locally), the scope is not read.
 import argparse
 import os
 import shutil
@@ -15,13 +21,48 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--catalog", required=True)
 parser.add_argument("--volume", required=True)
 parser.add_argument("--sample-rows", type=int, default=0)   # default avoids `None > 0`
+parser.add_argument("--secret-scope", default="kaggle")
 args = parser.parse_args()
 
 catalog = args.catalog
 volume = args.volume
 sample_rows = args.sample_rows
+secret_scope = args.secret_scope
 
 vol_root = f"/Volumes/{catalog}/bronze/{volume}"
+
+
+def get_dbutils():
+    # On Databricks compute this returns the runtime dbutils (values get redacted
+    # in logs); locally it falls back to a REST-backed dbutils using your CLI profile.
+    from databricks.sdk import WorkspaceClient
+    return WorkspaceClient().dbutils
+
+
+def load_kaggle_credentials(scope: str) -> bool:
+    """Copy Kaggle credentials from a secret scope into the env vars kagglehub reads."""
+    if os.environ.get("KAGGLE_API_TOKEN") or os.environ.get("KAGGLE_KEY"):
+        print("Using Kaggle credentials already present in the environment.")
+        return True
+
+    dbutils = get_dbutils()
+
+    try:
+        os.environ["KAGGLE_API_TOKEN"] = dbutils.secrets.get(scope=scope, key="api_token")
+        print(f"Loaded Kaggle API token from secret scope '{scope}'.")
+        return True
+    except Exception:
+        pass  # fall through to legacy username/key
+
+    try:
+        os.environ["KAGGLE_USERNAME"] = dbutils.secrets.get(scope=scope, key="username")
+        os.environ["KAGGLE_KEY"] = dbutils.secrets.get(scope=scope, key="key")
+        print(f"Loaded legacy Kaggle username/key from secret scope '{scope}'.")
+        return True
+    except Exception as e:
+        print(f"No Kaggle credentials found in secret scope '{scope}': {e}")
+        return False
+
 
 # Catalog, schemas and volume are owned by Terraform (terraform/envs/<env>).
 # Fail fast instead of creating them here, which would make the next apply fail.
@@ -32,8 +73,10 @@ if not os.path.isdir(vol_root):
 for sub in ("transactions", "users", "cards", "mcc", "device_events", "notifications"):
     os.makedirs(f"{vol_root}/{sub}", exist_ok=True)
 
-# Kaggle download. Needs KAGGLE_USERNAME / KAGGLE_KEY (or ~/.kaggle/kaggle.json).
+# Kaggle download. Credentials must be in the environment *before* kagglehub resolves them.
 try:
+    if not load_kaggle_credentials(secret_scope):
+        raise RuntimeError("no Kaggle credentials available")
     import kagglehub
     src = kagglehub.dataset_download("computingvictor/transactions-fraud-datasets")
     for fname, sub in [
@@ -50,6 +93,10 @@ except Exception as e:
     # No network/credentials: upload the files to the volume manually and re-run.
     print("Kaggle download skipped:", e)
     print(f"Upload the CSVs into {vol_root}/<users|cards|transactions|mcc>/ and re-run.")
+finally:
+    # Don't leave the token lying around in the process environment.
+    for var in ("KAGGLE_API_TOKEN", "KAGGLE_USERNAME", "KAGGLE_KEY"):
+        os.environ.pop(var, None)
 
 # Cap transaction rows to stay within the Free Edition quota.
 if sample_rows > 0:

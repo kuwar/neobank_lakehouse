@@ -40,6 +40,8 @@ resources:
               - "${var.volume}"
               - "--sample-rows"
               - "${var.sample_rows}"
+              - "--secret-scope"
+              - "${var.kaggle_secret_scope}"
 
         - task_key: build_medallion
           depends_on:

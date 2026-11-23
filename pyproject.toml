@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 authors = [{ name = "KUWAR Shaurave", email = "kuwarsaurav21@gmail.com" }]
 dependencies = [
+    "kagglehub>=1.0.3",
 ]
 
 [dependency-groups]
