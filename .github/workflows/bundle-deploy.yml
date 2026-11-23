@@ -40,7 +40,7 @@ jobs:
       DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10 # wheel build
+      - uses: astral-sh/setup-uv@v10.4.0 # wheel build
       - uses: databricks/setup-cli@main
       - run: make validate # renders the prod dashboard first
       - run: make deploy
