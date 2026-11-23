@@ -29,16 +29,17 @@ joins:
   - name: user
     source: {catalog}.{gold}.dim_users
     on: source.client_id = user.client_id
+    
   # One row per MCC. dim_merchant is per merchant and city, so joining it would
   # duplicate transactions.
-  - name: mcc
+  - name: mcc_code
     source: {catalog}.{gold}.dim_mcc_code
-    on: source.mcc = mcc.mcc
+    on: source.mcc = mcc_code.mcc
 fields:
   - name: Transaction date
     expr: transaction_date
   - name: Merchant category
-    expr: mcc.mcc_description
+    expr: mcc_code.mcc_description
   - name: Income band
     expr: user.income_band
   - name: Credit band
